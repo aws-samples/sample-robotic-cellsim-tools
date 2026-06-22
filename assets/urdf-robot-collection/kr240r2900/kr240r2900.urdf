@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="">
+  <joint name="joint_a1" type="revolute">
+    <origin xyz="0. 0. 0.860625" rpy="3.1415927 0. 3.1415927"/>
+    <parent link="like_kr240r2900_base_link"/>
+    <child link="like_kr240r2900_link_1"/>
+    <axis xyz="0. 0. 1."/>
+    <limit lower="-3.2288591" upper="3.2288591" effort="340282346638528859811704183484516925440." velocity="2.7227136"/>
+  </joint>
+  <joint name="joint_a2" type="revolute">
+    <origin xyz="-0.44625 0. 0. " rpy="3.1415927 0. 3.1415927"/>
+    <parent link="like_kr240r2900_link_1"/>
+    <child link="like_kr240r2900_link_2"/>
+    <axis xyz="0. 1. 0."/>
+    <limit lower="-2.7052601" upper="0.6108652" effort="340282346638528859811704183484516925440." velocity="2.7227136"/>
+  </joint>
+  <joint name="joint_a3" type="revolute">
+    <origin xyz="1.46625 0. 0. " rpy="0. 0. 0."/>
+    <parent link="like_kr240r2900_link_2"/>
+    <child link="like_kr240r2900_link_3"/>
+    <axis xyz="0. 1. 0."/>
+    <limit lower="-2.268928" upper="2.687807" effort="340282346638528859811704183484516925440." velocity="2.7227136"/>
+  </joint>
+  <joint name="joint_a4" type="revolute">
+    <origin xyz="1.2750001 0. -0.052275 " rpy="0. 0. 3.1415927"/>
+    <parent link="like_kr240r2900_link_3"/>
+    <child link="like_kr240r2900_link_4"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-6.1086524" upper="6.1086524" effort="340282346638528859811704183484516925440." velocity="5.759586"/>
+  </joint>
+  <joint name="joint_a5" type="revolute">
+    <origin xyz="0. 0. -0." rpy="0. 0. 3.1415927"/>
+    <parent link="like_kr240r2900_link_4"/>
+    <child link="like_kr240r2900_link_5"/>
+    <axis xyz="0. 1. 0."/>
+    <limit lower="-2.268928" upper="2.268928" effort="340282346638528859811704183484516925440." velocity="5.759586"/>
+  </joint>
+  <joint name="joint_a6" type="revolute">
+    <origin xyz="0. 0. 0." rpy="0. 0. 3.1415927"/>
+    <parent link="like_kr240r2900_link_5"/>
+    <child link="like_kr240r2900_link_6"/>
+    <axis xyz="1. 0. 0."/>
+    <limit lower="-6.1086524" upper="6.1086524" effort="340282346638528859811704183484516925440." velocity="10.7337749"/>
+  </joint>
+  <joint name="root_joint" type="fixed">
+    <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+    <parent link="World"/>
+    <child link="like_kr240r2900_base_link"/>
+  </joint>
+  <link name="World"/>
+  <link name="like_kr240r2900_base_link">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_base_link_visuals_base_link_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_base_link_collisions_base_link_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_1">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="3.1415927 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_1_visuals_link_1_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="3.1415927 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_1_collisions_link_1_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_2">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_2_visuals_link_2_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_2_collisions_link_2_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_3">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_3_visuals_link_3_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_3_collisions_link_3_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_4">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. -0." rpy="0. 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_4_visuals_link_4_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. -0." rpy="0. 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_4_collisions_link_4_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_5">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_5_visuals_link_5_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_5_collisions_link_5_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+  <link name="like_kr240r2900_link_6">
+    <inertial>
+      <origin xyz="0. 0. 0." rpy="0. 0. 0."/>
+      <mass value="2."/>
+      <inertia ixx="0.01" ixy="0." ixz="0." iyy="0.01" iyz="0." izz="0.01"/>
+    </inertial>
+    <visual>
+      <origin xyz="0. 0. 0." rpy="0. 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_6_visuals_link_6_Scene_mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0. 0. 0." rpy="0. 0. 3.1415927"/>
+      <geometry>
+        <mesh filename="./meshes/like_kr240r2900_link_6_collisions_link_6_node_STL_BINARY__mesh.obj" scale="1. 1. 1."/>
+      </geometry>
+    </collision>
+  </link>
+</robot>

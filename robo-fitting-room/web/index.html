@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>robo-fitting-room — scene editor</title>
+    <link rel="stylesheet" href="/style.css" />
+    <!-- js-yaml for round-tripping the manifest -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <strong>robo-fitting-room</strong>
+      <span class="muted">scene editor</span>
+      <span class="grow"></span>
+      <button id="btn-load-yaml">Load Scene YAML…</button>
+      <button id="btn-save">Save…</button>
+      <button id="btn-compose">Generate USDA</button>
+    </header>
+
+    <main>
+      <aside id="palette">
+        <button class="aside-toggle" data-aside="palette" title="Collapse palette">◂</button>
+        <div class="aside-body">
+          <h3>Palette</h3>
+          <details open>
+            <summary>Robots</summary>
+            <ul id="palette-robots" class="palette-list"></ul>
+          </details>
+          <details open>
+            <summary>Fixtures</summary>
+            <ul id="palette-fixtures" class="palette-list"></ul>
+          </details>
+          <details>
+            <summary>Floor plans</summary>
+            <ul id="palette-floor-plans" class="palette-list"></ul>
+          </details>
+        </div>
+        <div class="aside-collapsed-label">Palette</div>
+      </aside>
+
+      <section id="canvas-pane">
+        <canvas id="canvas"></canvas>
+        <div id="canvas-overlay">
+          <div id="coord-readout" class="muted"></div>
+          <div id="status-line">Ready.</div>
+        </div>
+      </section>
+
+      <aside id="inspector">
+        <button class="aside-toggle" data-aside="inspector" title="Collapse inspector">▸</button>
+        <div class="aside-body">
+          <h3>Inspector</h3>
+          <div id="inspector-empty" class="muted">Select a robot or fixture to edit.</div>
+          <div id="inspector-form" hidden></div>
+        </div>
+        <div class="aside-collapsed-label">Inspector</div>
+      </aside>
+    </main>
+
+    <input id="file-yaml" type="file" accept=".yaml,.yml" hidden />
+
+    <!-- Compose options modal — opened by btn-compose, submitted by btn-compose-go. -->
+    <div id="compose-modal" class="modal" hidden>
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <h3>Generate USDA</h3>
+
+        <div class="form-group">
+          <h4>Robot fidelity</h4>
+          <label class="row-check">
+            <input type="checkbox" id="opt-full-robots"/>
+            <span>Full robot visuals <em>(off = collision hulls only — leaner zip)</em></span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <h4>Tool fidelity</h4>
+          <label class="row-check">
+            <input type="checkbox" id="opt-full-tools" checked/>
+            <span>Full tool visuals <em>(off = collision hulls only)</em></span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <h4>Download</h4>
+          <div class="row">
+            <label>filename</label>
+            <input type="text" id="opt-filename" value=""/>
+          </div>
+          <div class="muted" style="margin-top:4px;">
+            Default: <code>scene-&lt;yyyymmddhhmmss&gt;.zip</code>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="btn-compose-cancel">Cancel</button>
+          <button id="btn-compose-go">Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

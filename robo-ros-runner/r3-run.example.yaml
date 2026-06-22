@@ -1,0 +1,31 @@
+# robo-ros-runner run config. Paths are resolved relative to this file.
+# CLI flags override these values (flags win).
+
+cell_yaml: ../assets/fitted-robots/demo-cell.yaml
+csv: ../assets/data-captures/joint_angles_timeline.csv
+csv_format: wide          # wide | long  (long = combined_timeseries.csv, backlog)
+
+rate: 1.0                 # playback speed multiplier (1.0 = capture rate)
+loop_play: false
+start_s: null             # skip frames before this time (seconds)
+end_s: null               # stop after this time
+robots: null              # null = all; or a list e.g. [robot_01, robot_02]
+empty_cell: hold_last     # hold_last | skip
+
+topic_overrides: {}       # robot_id -> full topic, e.g. {robot_01: /custom/topic}
+cell_ns_override: null    # null = derive from the cell manifest name
+
+mapping:
+  # The capture is raw KUKA degrees; some axes sit outside the URDF limits
+  # (a zero/sign offset vs the model frame). Tune sign/offset per axis here.
+  # Default (this block omitted) = identity, clamp off = plain deg->rad.
+  clamp_to_limits: true   # pin out-of-range targets to the URDF bound
+  warn_out_of_range: true # log a warning when a target is out of range
+  default_axes:           # applies to every robot unless overridden below
+    - { sign: 1.0, offset_rad: 0.0 }   # a1
+    - { sign: 1.0, offset_rad: 0.0 }   # a2  (the ~-200 deg axis — tune here)
+    - { sign: 1.0, offset_rad: 0.0 }   # a3
+    - { sign: 1.0, offset_rad: 0.0 }   # a4
+    - { sign: 1.0, offset_rad: 0.0 }   # a5
+    - { sign: 1.0, offset_rad: 0.0 }   # a6
+  per_robot: {}           # robot_id -> [six AxisMap], overrides default_axes

@@ -1,0 +1,64 @@
+[package]
+name = "urdf-robo-dresser"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Programmatic URDF robot-tool merging: dress industrial robots with end-effectors from a catalogue"
+
+[lib]
+name = "urdf_robo_dresser"
+path = "src/lib.rs"
+
+[[bin]]
+name = "urdf-robo-dresser"
+path = "src/main.rs"
+
+[dependencies]
+quick-xml = "0.37"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+sha2 = "0.10"
+log = "0.4"
+env_logger = "0.11"
+parry3d = "0.17"
+
+# Feature-gated dependencies
+tokio = { version = "1", features = ["full"], optional = true }
+# Axum 0.7 + utoipa 4 + utoipa-swagger-ui 7 is the matched set the
+# fitting-room also uses; staying on it keeps both servers's wire layers
+# binary-compatible and lets us reuse the cross-crate client wholesale.
+# Bumping axum to 0.8 will also need utoipa-swagger-ui >= 9 (not yet
+# released as of writing).
+axum = { version = "0.7", optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.5", features = ["cors", "set-header"], optional = true }
+rust-embed = { version = "8", optional = true }
+utoipa = { version = "4", features = ["axum_extras"], optional = true }
+utoipa-swagger-ui = { version = "7", features = ["axum"], optional = true }
+uuid = { version = "1", features = ["v4", "serde"], optional = true }
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+
+[features]
+# Default-on: a plain `cargo build` / `cargo run` produces the
+# full-featured binary (CLI + REST server). To get the slim CLI-only
+# build (no axum/tokio/utoipa in the dep graph) pass
+# `--no-default-features`.
+default = ["server"]
+server = ["tokio", "axum", "tower", "tower-http", "rust-embed", "utoipa", "utoipa-swagger-ui", "uuid", "zip"]
+viewer = []
+full = ["server", "viewer"]
+# Opt-in test feature: enables `tests/real_assets.rs` which dresses real
+# robot+tool URDFs from the in-repo `../assets/` catalogue. The catalogue
+# is vendor-specific and will NOT ship with the open-source release; drop
+# `--features real-assets` from CI when those URDFs are pruned. Tests
+# inside skip gracefully if individual files are missing.
+real-assets = []
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+pretty_assertions = "1"

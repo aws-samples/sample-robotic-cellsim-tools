@@ -1,0 +1,3 @@
+Note: 
+
+urdf files & meshes sourced from customer data will not be checked in here...

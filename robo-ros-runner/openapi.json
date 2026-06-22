@@ -1,0 +1,552 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "robo-ros-runner API",
+    "description": "Versioned REST API exposed by `robo-ros-runner serve`. Resolve topics, inspect captures, and start/stop playback jobs over the same pipeline the CLI drives. Liveness / readiness probes sit at the root (`/healthz`, `/readyz`).",
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/csv/inspect": {
+      "post": {
+        "tags": [
+          "csv"
+        ],
+        "operationId": "inspect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CsvInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Capture schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsvInspectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path / parse error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/playback": {
+      "post": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Job started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path / parse error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/playback/{id}": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Job id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Job id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancellation requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/topics": {
+      "post": {
+        "tags": [
+          "topics"
+        ],
+        "operationId": "resolve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Resolved topics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path / parse error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "description": "Service is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "readyz",
+        "responses": {
+          "200": {
+            "description": "Service is ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CsvInspectRequest": {
+        "type": "object",
+        "description": "Request body for CSV inspection.",
+        "required": [
+          "csv_path"
+        ],
+        "properties": {
+          "csv_path": {
+            "type": "string"
+          }
+        }
+      },
+      "CsvInspectResponse": {
+        "type": "object",
+        "required": [
+          "robots",
+          "axes_per_robot"
+        ],
+        "properties": {
+          "axes_per_robot": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "robots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "row_count": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 0
+          },
+          "t_max": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "t_min": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "description": "Uniform error body for every 4xx/5xx response.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthDto": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "PlaybackRequest": {
+        "type": "object",
+        "description": "Request body to start a playback job. Paths are relative to `asset_root`.",
+        "required": [
+          "cell_path",
+          "csv_path"
+        ],
+        "properties": {
+          "cell_path": {
+            "type": "string"
+          },
+          "clamp": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "csv_path": {
+            "type": "string"
+          },
+          "end_s": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "loop_play": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "rate": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "robots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "start_s": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "PlaybackStartResponse": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "topics"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedTopic"
+            }
+          }
+        }
+      },
+      "PlaybackStatusResponse": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status",
+          "frames_published",
+          "messages_published",
+          "clamped_count",
+          "looped"
+        ],
+        "properties": {
+          "clamped_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "frames_published": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "looped": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "messages_published": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ReadinessDto": {
+        "type": "object",
+        "required": [
+          "ready",
+          "asset_root"
+        ],
+        "properties": {
+          "asset_root": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ResolvedTopic": {
+        "type": "object",
+        "description": "One robot's resolved joint_command topic plus whether the CSV carries data\nfor it (a robot can be in the cell manifest but absent from the capture).",
+        "required": [
+          "robot_id",
+          "topic",
+          "has_csv_data"
+        ],
+        "properties": {
+          "has_csv_data": {
+            "type": "boolean"
+          },
+          "robot_id": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "TopicsRequest": {
+        "type": "object",
+        "description": "Request body naming a cell manifest + optional capture, both relative to\n`asset_root`.",
+        "required": [
+          "cell_path"
+        ],
+        "properties": {
+          "cell_path": {
+            "type": "string"
+          },
+          "csv_path": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "TopicsResponse": {
+        "type": "object",
+        "required": [
+          "cell_name",
+          "topics"
+        ],
+        "properties": {
+          "cell_name": {
+            "type": "string"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedTopic"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "topics",
+      "description": "Resolve per-robot joint_command topics from a cell manifest."
+    },
+    {
+      "name": "csv",
+      "description": "Inspect capture CSV schemas."
+    },
+    {
+      "name": "playback",
+      "description": "Start / stop / query playback jobs."
+    },
+    {
+      "name": "system",
+      "description": "Liveness + readiness probes."
+    }
+  ]
+}

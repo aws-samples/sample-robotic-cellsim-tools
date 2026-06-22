@@ -1,0 +1,20 @@
+assets/urdf-tool-collection/*/
+assets/urdf-dressed-robots/*/
+assets/urdf-fixture-collection/*/
+assets/floor-plans/*/
+assets/floor-plans/*.obj
+assets/fitted-robots/*.yaml
+assets/fitted-robots/*.zip
+assets/fitted-robots/*/
+assets/*.sh
+assets/data-captures/*.csv
+assets/data-captures/*.png
+assets/data-captures/*.txt
+assets/data-captures/*.py
+
+
+
+# Rust
+target/
+
+.DS_Store

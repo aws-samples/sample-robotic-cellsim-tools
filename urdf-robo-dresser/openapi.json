@@ -1,0 +1,828 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "urdf-robo-dresser API",
+    "description": "Versioned REST API exposed by `urdf-robo-dresser serve`. Mirrors the CLI subcommands one-for-one (`dress`, `validate`, `batch`, `list`) so both transports call the same library functions. Routes are pinned under `/api/v1/...`; liveness/readiness probes sit at the root.",
+    "license": {
+      "name": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/batch": {
+      "post": {
+        "tags": [
+          "batch"
+        ],
+        "operationId": "start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Batch accepted; poll the returned job_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid hull token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Catalogue empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalogue": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "GET /api/v1/catalogue — full catalogue listing under",
+        "description": "`<catalogue_root>/{urdf-robot-collection,urdf-tool-collection}`.",
+        "operationId": "list_all",
+        "responses": {
+          "200": {
+            "description": "Catalogue listing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueListing"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Catalogue scan failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalogue/robots": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "GET /api/v1/catalogue/robots — robot listing only.",
+        "operationId": "list_robots",
+        "responses": {
+          "200": {
+            "description": "Robot listing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RobotEntry"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Catalogue scan failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalogue/tools": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "GET /api/v1/catalogue/tools — tool listing only.",
+        "operationId": "list_tools",
+        "responses": {
+          "200": {
+            "description": "Tool listing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ToolEntry"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Catalogue scan failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dress": {
+      "post": {
+        "tags": [
+          "dress"
+        ],
+        "operationId": "dress",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Dressed URDF written under <catalogue>/urdf-dressed-robots/",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DressResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Inputs invalid (unknown id, bad orient, hull token, …)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "URDF validation failed (errors block the merge)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Filesystem or merge failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{id}": {
+      "get": {
+        "tags": [
+          "batch"
+        ],
+        "operationId": "status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Job UUID returned from POST /api/v1/batch",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Job id is not a UUID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown job id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{id}/artifact": {
+      "get": {
+        "tags": [
+          "batch"
+        ],
+        "operationId": "artifact",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Job UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Batch zip"
+          },
+          "400": {
+            "description": "Job id is not a UUID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job not found or not yet completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Artifact disappeared between job completion and download",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/validate": {
+      "post": {
+        "tags": [
+          "validate"
+        ],
+        "summary": "POST /api/v1/validate — validate a URDF file referenced by a",
+        "description": "catalogue-relative path. Mirrors the CLI `urdf-robo-dresser validate\n<path>`. The same lib function (`validate`) backs both transports.",
+        "operationId": "validate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Validation diagnostics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Path resolution or URDF parse error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "description": "Service is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "operationId": "readyz",
+        "responses": {
+          "200": {
+            "description": "Service is ready (catalogue scanned)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssetStatusDto": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "valid"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "issues",
+              "kind"
+            ],
+            "properties": {
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "incomplete"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "message",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "discriminator": {
+          "propertyName": "kind"
+        }
+      },
+      "BatchAccepted": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "status_url"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "status_url": {
+            "type": "string",
+            "description": "Convenience pointer for the polling endpoint\n(`GET /api/v1/jobs/{id}`). Clients are free to construct this\nthemselves."
+          }
+        }
+      },
+      "BatchRequest": {
+        "type": "object",
+        "properties": {
+          "hull": {
+            "type": "string",
+            "description": "Collision hull buffer to use for every permutation."
+          }
+        }
+      },
+      "CatalogueListing": {
+        "type": "object",
+        "required": [
+          "robots",
+          "tools"
+        ],
+        "properties": {
+          "robots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RobotEntry"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolEntry"
+            }
+          }
+        }
+      },
+      "DiagnosticDto": {
+        "type": "object",
+        "required": [
+          "severity",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      },
+      "DressRequest": {
+        "type": "object",
+        "required": [
+          "robot_id",
+          "tool_id"
+        ],
+        "properties": {
+          "attach_to": {
+            "type": "string",
+            "description": "Override the auto-detected flange link.",
+            "nullable": true
+          },
+          "hull": {
+            "type": "string",
+            "description": "Collision hull buffer size: `tight` / `medium` (default) / `max`."
+          },
+          "orient": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Tool orientation in 90° steps as `[x, y, z]` degrees. Each value\nmust be 0, 90, 180, or 270."
+          },
+          "robot_id": {
+            "type": "string",
+            "description": "Catalogue ID for the robot — corresponds to `<catalogue>/urdf-robot-collection/<robot_id>/<robot_id>.urdf`."
+          },
+          "tool_id": {
+            "type": "string",
+            "description": "Catalogue ID for the tool — corresponds to `<catalogue>/urdf-tool-collection/<tool_id>/<tool_id>.urdf`."
+          }
+        }
+      },
+      "DressResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "dressed_urdf_rel",
+          "diagnostics"
+        ],
+        "properties": {
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticDto"
+            },
+            "description": "Inline-listed validation diagnostics from `validator::validate`\nagainst both inputs. Always present so clients can surface\nnon-blocking warnings."
+          },
+          "dressed_urdf_rel": {
+            "type": "string",
+            "description": "Catalogue-relative path of the resulting dressed URDF."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True iff the dressed URDF + meshes are written to disk under\n`<catalogue>/urdf-dressed-robots/<robot_id>__<tool_id>/`."
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "description": "Uniform error body. Same shape as fitting-room's so cross-service\nclients see a consistent contract.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthDto": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "JobStatus": {
+        "type": "object",
+        "required": [
+          "job_id",
+          "state"
+        ],
+        "properties": {
+          "artifact_url": {
+            "type": "string",
+            "description": "Artifact download URL (`GET /api/v1/jobs/{id}/artifact`) once\nthe job is `completed`.",
+            "nullable": true
+          },
+          "failed": {
+            "type": "integer",
+            "description": "Number of failed permutations (only set when `completed`).",
+            "nullable": true,
+            "minimum": 0
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "description": "Failure message if the job state is `failed`.",
+            "nullable": true
+          },
+          "progress": {
+            "type": "number",
+            "format": "float",
+            "description": "0.0..1.0 best-effort progress while `state == \"running\"`.",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "description": "`queued` | `running` | `completed` | `failed`."
+          },
+          "success": {
+            "type": "integer",
+            "description": "Number of successful permutations (only set when `completed`).",
+            "nullable": true,
+            "minimum": 0
+          }
+        }
+      },
+      "ReadinessDto": {
+        "type": "object",
+        "required": [
+          "ready",
+          "catalogue_root",
+          "robot_count",
+          "tool_count"
+        ],
+        "properties": {
+          "catalogue_root": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "robot_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tool_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "RobotEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "flange_link",
+          "joint_count",
+          "link_count",
+          "status"
+        ],
+        "properties": {
+          "flange_link": {
+            "type": "string"
+          },
+          "joint_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "link_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatusDto"
+          }
+        }
+      },
+      "ToolEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "visual_count",
+          "status"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssetStatusDto"
+          },
+          "visual_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ValidateRequest": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Catalogue-relative path to the URDF to validate."
+          },
+          "tool": {
+            "type": "boolean",
+            "description": "True to validate as a tool (extra origin alignment checks);\nfalse for a robot (default)."
+          }
+        }
+      },
+      "ValidateResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "diagnostics"
+        ],
+        "properties": {
+          "diagnostics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticDto"
+            }
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "catalogue",
+      "description": "Robot + tool catalogue listings."
+    },
+    {
+      "name": "dress",
+      "description": "Merge a robot URDF with a tool URDF."
+    },
+    {
+      "name": "validate",
+      "description": "URDF static validation."
+    },
+    {
+      "name": "batch",
+      "description": "Batch dress every robot × tool permutation."
+    },
+    {
+      "name": "system",
+      "description": "Liveness + readiness probes."
+    }
+  ]
+}

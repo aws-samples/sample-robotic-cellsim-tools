@@ -1,0 +1,66 @@
+[package]
+name = "robo-ros-runner"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Replay captured joint-angle timelines onto ROS 2 joint_command topics to drive an Isaac Sim cell (CLI + REST server)"
+
+[lib]
+name = "robo_ros_runner"
+path = "src/lib.rs"
+
+[[bin]]
+name = "robo-ros-runner"
+path = "src/main.rs"
+
+[features]
+# There are NO build-mode feature flags. ROS 2 / DDS and the REST server are
+# core — a plain `cargo build` produces the whole tool (CLI + DDS + server),
+# pure-Rust with no native deps. The only feature here is a test-data toggle:
+# `real-assets` enables `tests/real_assets.rs`, which runs against the in-repo
+# `../assets/` capture + cell manifest. Those captures are vendor-specific and
+# will NOT ship with the open-source release; drop `--features real-assets`
+# from CI when they are pruned. Tests inside skip gracefully if files are missing.
+real-assets = []
+
+[dependencies]
+# Reuse the sibling crates' public APIs (parse_scene / parse_urdf). Pulled with
+# default-features off so R3 doesn't drag in their axum server stacks; R3 brings
+# its own.
+robo-fitting-room = { path = "../robo-fitting-room", default-features = false }
+urdf-robo-dresser = { path = "../urdf-robo-dresser", default-features = false }
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+log = "0.4"
+env_logger = "0.11"
+
+# REST server stack — Axum 0.7 + utoipa 4 + utoipa-swagger-ui 7 is the matched
+# set the other two crates use; staying on it keeps every server's wire layer
+# binary-compatible. Bumping axum to 0.8 would also need utoipa-swagger-ui >= 9
+# (not yet released as of writing).
+axum = { version = "0.7" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde_json = { version = "1" }
+utoipa = { version = "4", features = ["axum_extras"] }
+utoipa-swagger-ui = { version = "7", features = ["axum"] }
+uuid = { version = "1", features = ["v4"] }
+
+# ROS 2 transport — pure-Rust client (RustDDS under the hood, re-exported as
+# `ros2_client::rustdds`). Speaks RTPS straight to Isaac Sim's FastDDS/Cyclone
+# bridge over a shared ROS_DOMAIN_ID — no rcl/ROS install, no native deps.
+# Pinned to 0.8: the 0.7.x line resolves a broken rustdds 0.11.8 combo
+# (ros2-client's `use rustdds::*` expects the CdrEncodingSize derive the 0.11.8
+# patch dropped). 0.8 pins a compatible rustdds.
+ros2-client = { version = "0.8" }
+
+[dev-dependencies]
+tempfile = "3"
+pretty_assertions = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
