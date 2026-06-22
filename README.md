@@ -1,4 +1,5 @@
-# robotic-cell-sim
+robotic-cellsim-tools
+=====================
 
 Three Rust binaries for assembling, validating, and driving simulation
 scenes of multi-robot industrial cells in Isaac Sim. Inputs are
