@@ -4,7 +4,7 @@
 
 A pure-Rust multi-backend scene composition and validation engine that ingests URDF structures and 2D CAD floor plans to assemble, validate, and deploy simulation scenes. Backend-agnostic at the manifest level — the same scene YAML drives all supported physics engines (Isaac Sim first, MuJoCo and Gazebo planned).
 
-Target: standalone open-source release (MIT/Apache-2.0 dual-licensed).
+Target: standalone open-source release.
 
 ---
 

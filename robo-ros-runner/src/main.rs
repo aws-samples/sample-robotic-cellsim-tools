@@ -24,7 +24,7 @@ const AFTER_HELP: &str = "\
 Quick start
 -----------
   # what topics will a cell drive?
-  robo-ros-runner topics --cell ../assets/fitted-robots/k8urw11-cell.yaml \\
+  robo-ros-runner topics --cell ../assets/fitted-robots/demo-cell.yaml \\
       --csv ../assets/data-captures/joint_angles_timeline.csv
 
   # what's in a capture?

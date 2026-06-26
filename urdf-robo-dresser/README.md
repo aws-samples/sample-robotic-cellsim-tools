@@ -370,9 +370,3 @@ cargo test
 ```
 
 15 tests covering parser round-trip, validator diagnostics, flange detection, merge correctness, and mesh reading.
-
----
-
-## License
-
-MIT OR Apache-2.0

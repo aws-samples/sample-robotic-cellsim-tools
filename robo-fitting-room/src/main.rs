@@ -18,8 +18,8 @@ const AFTER_HELP: &str = "\
 Quick start
 -----------
   # one-shot CLI
-  robo-fitting-room validate ../assets/fitted-robots/k8urw11-cell.yaml
-  robo-fitting-room compose -m ../assets/fitted-robots/k8urw11-cell.yaml -o /tmp/cell.zip
+  robo-fitting-room validate ../assets/fitted-robots/demo-cell.yaml
+  robo-fitting-room compose -m ../assets/fitted-robots/demo-cell.yaml -o /tmp/cell.zip
 
   # long-running server (default build includes it)
   robo-fitting-room serve --asset-root ../assets

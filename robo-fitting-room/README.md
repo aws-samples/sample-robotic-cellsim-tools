@@ -64,7 +64,7 @@ Drag robots and fixtures from the palette onto the floor plan, set
 per-robot home poses in the inspector, click **Generate USDA** to
 download a recomposed zip.
 
-<!-- SCREENSHOT-NEEDED: 2D editor with the demo manifest loaded — palette on left, canvas centre with the 8 robots + 2 fixtures placed on the floor plan, inspector on right showing one robot selected with its home-pose form. Save under docs/img/editor-demo-cell.png -->
+<img src="docs/img/fitting-ui.png" width="640" alt="robo-fitting-room — 2D scene-layout editor"/>
 
 ## Visual fidelity matrix
 
@@ -111,7 +111,3 @@ What's planned (per [REQUIREMENTS.md](REQUIREMENTS.md)):
 - Spatial validation: FK reach envelopes, static collision detection (FR-130..133)
 - Isaac Sim live-deploy via Kit Remote (FR-170..177)
 - MuJoCo / Gazebo backends (BL-04 / BL-05)
-
-## License
-
-MIT OR Apache-2.0.

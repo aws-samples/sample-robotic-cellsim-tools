@@ -4,7 +4,7 @@
 
 A pure-Rust CLI and library that programmatically merges robot base URDFs with tool/end-effector URDFs from a structured asset catalogue, producing validated composite URDF files.
 
-Target: standalone open-source release (MIT/Apache-2.0 dual-licensed).
+Target: standalone open-source release.
 
 ---
 

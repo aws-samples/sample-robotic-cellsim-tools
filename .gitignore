@@ -16,5 +16,6 @@ assets/data-captures/*.py
 
 # Rust
 target/
-
+assets/data-captures/joint_map.yaml
 .DS_Store
+.cargo

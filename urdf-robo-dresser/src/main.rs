@@ -21,7 +21,7 @@ Quick start
   urdf-robo-dresser list --catalogue ../assets
   urdf-robo-dresser dress \\
       --robot ../assets/urdf-robot-collection/kr240r2900/kr240r2900.urdf \\
-      --tool  ../assets/urdf-tool-collection/GREIFER_URW1_OP3210_R01G1/GREIFER_URW1_OP3210_R01G1.urdf \\
+      --tool  ../assets/urdf-tool-collection/gripper_tool/gripper_tool.urdf \\
       --output /tmp/dressed.urdf
 
   # long-running server (default build includes it)
@@ -64,7 +64,7 @@ Examples:
   # Auto-orient a gripper onto a KR240
   urdf-robo-dresser dress \\
       --robot ../assets/urdf-robot-collection/kr240r2900/kr240r2900.urdf \\
-      --tool  ../assets/urdf-tool-collection/GREIFER_URW1_OP3210_R01G1/GREIFER_URW1_OP3210_R01G1.urdf \\
+      --tool  ../assets/urdf-tool-collection/gripper_tool/gripper_tool.urdf \\
       --output /tmp/kr240_gripper.urdf
 
   # Force a specific flange link + 90° rotation about the tool Z axis
@@ -135,7 +135,7 @@ Examples:
 
   # Validate as a tool (extra origin checks)
   urdf-robo-dresser validate \\
-      ../assets/urdf-tool-collection/GREIFER_URW1_OP3210_R01G1/GREIFER_URW1_OP3210_R01G1.urdf \\
+      ../assets/urdf-tool-collection/gripper_tool/gripper_tool.urdf \\
       --tool")]
     Validate {
         /// Path to the URDF file.

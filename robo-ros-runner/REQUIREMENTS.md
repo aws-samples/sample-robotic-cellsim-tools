@@ -4,7 +4,7 @@
 
 A pure-Rust application that replays a captured joint-angle timeline onto ROS 2 `joint_command` topics, driving a running Isaac Sim cell composed by `robo-fitting-room`. It resolves the same topic namespaces Isaac subscribes to, converts captured degrees into commanded radians through a configurable per-axis mapping, and publishes `sensor_msgs/msg/JointState`. ROS 2 / DDS (pure-Rust ros2-client over RustDDS) and the REST server are core — a plain `cargo build` produces the whole tool with no native deps and no build-mode feature flags. A `StdoutSink` provides a no-DDS `dry-run` preview.
 
-Target: standalone open-source release (MIT/Apache-2.0 dual-licensed).
+Target: standalone open-source release.
 
 ---
 
