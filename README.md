@@ -89,14 +89,13 @@ Keep all downloaded crates and build caches inside the repo by pointing
 cleanup — the repo's `.gitignore` already excludes `.cargo/` and `target/`):
 
 ```sh
-git clone <this repo>
-cd robotic-cellsim-tools
+# git clone <this repo>
+# cd robotic-cellsim-tools
 export CARGO_HOME="$PWD/.cargo"          # vendor crates + caches under the repo
 
 cargo build --release --manifest-path urdf-robo-dresser/Cargo.toml
 cargo build --release --manifest-path robo-fitting-room/Cargo.toml
 cargo build --release --manifest-path robo-ros-runner/Cargo.toml
-# robo-ros-runner needs no feature flags — ROS 2 / DDS + server are core
 ```
 
 The default build ships both the CLI and the REST server in each binary; pass
