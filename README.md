@@ -26,7 +26,7 @@ opaque, one-shot black boxes.
   'clusterBkg':'#0a0e14','clusterBorder':'#1f6feb'}}}%%
 flowchart TD
     ROBOT[/"robot-arm URDFs"/]:::data
-    TOOL[/"end-effector tool URDFs"/]:::data
+    TOOL[/"tool URDFs"/]:::data
     DRESS(["<b>urdf-robo-dresser</b>"]):::tool
     DRESSED[/"dressed URDFs"/]:::data
     MAN[/"scene manifest YAML"/]:::data
