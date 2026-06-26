@@ -25,7 +25,8 @@ opaque, one-shot black boxes.
   'primaryBorderColor':'#00e5ff','lineColor':'#00e5ff','fontFamily':'monospace',
   'clusterBkg':'#0a0e14','clusterBorder':'#1f6feb'}}}%%
 flowchart TD
-    URDF[/"off-the-shelf URDFs"/]:::data
+    ROBOT[/"robot-arm URDFs"/]:::data
+    TOOL[/"end-effector tool URDFs"/]:::data
     DRESS(["<b>urdf-robo-dresser</b>"]):::tool
     DRESSED[/"dressed URDFs"/]:::data
     MAN[/"scene manifest YAML"/]:::data
@@ -37,7 +38,9 @@ flowchart TD
     R3(["<b>robo-ros-runner</b>"]):::tool
     PLAN["motion-planning / agentic service<br/><i>validate AI generated trajectories · collision-free checks</i>"]:::ext
 
-    URDF --> DRESS --> DRESSED --> FIT
+    ROBOT --> DRESS
+    TOOL --> DRESS
+    DRESS --> DRESSED --> FIT
     MAN --> FIT --> ZIP --> ISAAC
     ISAAC <==> ROS
     CSV --> R3 ==> ROS
