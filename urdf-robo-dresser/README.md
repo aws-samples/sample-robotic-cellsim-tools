@@ -2,6 +2,24 @@
 
 Programmatic URDF robot-tool merging for industrial automation. Takes a robot arm and an end-effector tool from a structured asset catalogue, automatically determines the correct mounting orientation, generates collision geometry, and produces a self-contained dressed URDF ready for simulation in Isaac Sim, RViz, or MoveIt.
 
+```mermaid
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#0a0e14','primaryColor':'#11151c','primaryTextColor':'#e6faff',
+  'primaryBorderColor':'#00e5ff','lineColor':'#00e5ff','fontFamily':'monospace'}}}%%
+flowchart LR
+    ROBOT[/"robot-arm URDFs"/]:::data
+    TOOL[/"end-effector tool URDFs"/]:::data
+    DRESS(["<b>urdf-robo-dresser</b>"]):::tool
+    DRESSED[/"dressed URDFs"/]:::data
+
+    ROBOT --> DRESS
+    TOOL --> DRESS
+    DRESS --> DRESSED
+
+    classDef tool fill:#11151c,stroke:#00e5ff,stroke-width:3px,color:#7CFFCB,font-weight:bold,font-size:15px;
+    classDef data fill:#0d1117,stroke:#ff2bd6,stroke-width:1px,color:#ffb3f0;
+```
+
 ---
 
 ## Quick Start

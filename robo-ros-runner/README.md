@@ -9,9 +9,21 @@ per-robot `joint_command` topics Isaac listens on, converts captured degrees int
 commanded radians through a configurable per-axis mapping, and publishes
 `sensor_msgs/msg/JointState`.
 
-```
-capture CSV ──▶ frame stream ──▶ deg→rad mapping ──▶ JointState ──▶ joint_command topics
-   (degrees)     (per timestamp)   (+clamp/affine)     (radians)      Isaac Sim bridge
+```mermaid
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#0a0e14','primaryColor':'#11151c','primaryTextColor':'#e6faff',
+  'primaryBorderColor':'#00e5ff','lineColor':'#00e5ff','fontFamily':'monospace'}}}%%
+flowchart LR
+    CSV[/"captured joint timeline · CSV<br/><i>degrees</i>"/]:::data
+    R3(["<b>robo-ros-runner</b><br/><i>deg→rad map · +clamp/affine</i>"]):::tool
+    ROS[["ROS 2 / DDS · joint_command topics<br/><i>JointState · radians</i>"]]:::sim
+    ISAAC{{"Isaac Sim bridge"}}:::sim
+
+    CSV --> R3 ==> ROS --> ISAAC
+
+    classDef tool fill:#11151c,stroke:#00e5ff,stroke-width:3px,color:#7CFFCB,font-weight:bold,font-size:15px;
+    classDef data fill:#0d1117,stroke:#ff2bd6,stroke-width:1px,color:#ffb3f0;
+    classDef sim  fill:#11151c,stroke:#b6ff00,stroke-width:2px,color:#eaffb0;
 ```
 
 ## Why this exists

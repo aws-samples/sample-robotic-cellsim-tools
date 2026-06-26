@@ -7,20 +7,28 @@ emits a self-contained `.zip` with an inlined ASCII USDA stage ready
 to load in Isaac Sim 5.1+. CLI for offline / scripted use; in-binary
 REST server with a 2D scene-layout editor for interactive workflows.
 
-```
-manifest.yaml + dressed URDFs + floor plan
-                    │
-                    ▼
-            robo-fitting-room
-                    │
-                    ▼
-         <stem>.zip  ─►  Isaac Sim 5.1+
-                                │
-                                ▼
-                    /<cell>/<robot>/joint_states
-                    /<cell>/<robot>/joint_command
-                    /<cell>/<robot>/contacts/<link>
-                    /<cell>/clock
+```mermaid
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#0a0e14','primaryColor':'#11151c','primaryTextColor':'#e6faff',
+  'primaryBorderColor':'#00e5ff','lineColor':'#00e5ff','fontFamily':'monospace'}}}%%
+flowchart LR
+    DRESSED[/"dressed URDFs"/]:::data
+    MAN[/"scene manifest YAML"/]:::data
+    FLOOR[/"2D CAD floor plan"/]:::data
+    FIT(["<b>robo-fitting-room</b>"]):::tool
+    ZIP[/"composed .zip · USDA stage"/]:::data
+    ISAAC{{"Isaac Sim 5.1+"}}:::sim
+    ROS[["ROS 2 / DDS topics · joint_states / joint_command / contacts / clock"]]:::sim
+
+    DRESSED --> FIT
+    MAN --> FIT
+    FLOOR --> FIT
+    FIT --> ZIP --> ISAAC
+    ISAAC <==> ROS
+
+    classDef tool fill:#11151c,stroke:#00e5ff,stroke-width:3px,color:#7CFFCB,font-weight:bold,font-size:15px;
+    classDef data fill:#0d1117,stroke:#ff2bd6,stroke-width:1px,color:#ffb3f0;
+    classDef sim  fill:#11151c,stroke:#b6ff00,stroke-width:2px,color:#eaffb0;
 ```
 
 No native USD, PhysX, or Python deps — `cargo build` on a clean
