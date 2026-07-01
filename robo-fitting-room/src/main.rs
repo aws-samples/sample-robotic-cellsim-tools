@@ -3,6 +3,21 @@ use std::process;
 
 use clap::{Parser, Subcommand};
 
+/// Derive the URDF-bundle output path from the USDA `-o` output: insert a
+/// `-urdf` suffix before the extension (`cell.zip` -> `cell-urdf.zip`) in the
+/// same directory, so the second artifact never clobbers the first.
+fn urdf_bundle_path(output: &std::path::Path) -> PathBuf {
+    let stem = output
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("scene");
+    let name = format!("{}-urdf.zip", stem);
+    match output.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.join(name),
+        _ => PathBuf::from(name),
+    }
+}
+
 const BEFORE_HELP: &str = "\
 robo-fitting-room — manifest-driven scene composition + 2D scene editor
 =======================================================================
@@ -87,6 +102,13 @@ enum Command {
         /// urdf-robo-dresser writes; independent of `--full-robots`.
         #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
         full_tools: bool,
+        /// Also emit a second `<output-stem>-urdf.zip` alongside the USDA
+        /// zip: every source URDF copied verbatim (each in its own folder
+        /// with its `meshes/` subtree) + the scene YAML rewritten to
+        /// reference them by relative path, so the extracted archive is
+        /// self-contained. Off by default.
+        #[arg(long, default_value_t = false)]
+        urdf_bundle: bool,
     },
 
     // -------------------------------------------------------------
@@ -168,6 +190,7 @@ fn main() {
             backend,
             full_robots,
             full_tools,
+            urdf_bundle,
         } => {
             if backend != "isaac-sim" {
                 eprintln!("ERROR: backend '{}' not yet supported (only 'isaac-sim')", backend);
@@ -252,6 +275,32 @@ fn main() {
                 Err(e) => {
                     eprintln!("ERROR: {}", e);
                     process::exit(1);
+                }
+            }
+
+            // Optional second artifact: the self-contained URDF-source bundle.
+            if urdf_bundle {
+                let bundle_output = urdf_bundle_path(&output);
+                println!(
+                    "Bundling source URDFs \u{2192} {} ...",
+                    bundle_output.display()
+                );
+                match robo_fitting_room::compose_urdf_bundle(&scene, &manifest, &bundle_output) {
+                    Ok(b) => {
+                        println!(
+                            "Written: {} ({} robot URDFs, {} fixture URDFs, {} files, floor plan: {})",
+                            b.zip_path.display(),
+                            b.robot_urdf_count,
+                            b.fixture_urdf_count,
+                            b.file_count,
+                            if b.floor_plan_bundled { "yes" } else { "no" },
+                        );
+                        println!("  Bundle zip: {} bytes", b.zip_bytes);
+                    }
+                    Err(e) => {
+                        eprintln!("ERROR: {}", e);
+                        process::exit(1);
+                    }
                 }
             }
         }

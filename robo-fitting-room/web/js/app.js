@@ -228,12 +228,14 @@ const composeModal = document.getElementById("compose-modal");
 const composeFilename = document.getElementById("opt-filename");
 const composeFullRobots = document.getElementById("opt-full-robots");
 const composeFullTools = document.getElementById("opt-full-tools");
+const composeUrdfBundle = document.getElementById("opt-urdf-bundle");
 
 function openComposeModal() {
   // Pre-seed defaults each time so a previous edit doesn't carry over
   // unexpectedly.
   composeFullRobots.checked = false;
   composeFullTools.checked = true;
+  composeUrdfBundle.checked = false;
   composeFilename.value = `scene-${timestamp()}.zip`;
   composeModal.hidden = false;
   // Focus the primary action so Enter triggers Generate.
@@ -250,12 +252,25 @@ document.addEventListener("keydown", (e) => {
   if (!composeModal.hidden && e.key === "Escape") closeComposeModal();
 });
 
+/** Trigger a browser download of a Blob under the given filename. */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 document.getElementById("btn-compose-go").addEventListener("click", async () => {
   const fullRobots = composeFullRobots.checked;
   const fullTools = composeFullTools.checked;
+  const urdfBundle = composeUrdfBundle.checked;
   let downloadName = composeFilename.value.trim();
   if (!downloadName) downloadName = `scene-${timestamp()}.zip`;
   if (!/\.zip$/i.test(downloadName)) downloadName += ".zip";
+  // Bundle name mirrors the CLI: <stem>-urdf.zip next to the USDA zip name.
+  const bundleName = downloadName.replace(/\.zip$/i, "") + "-urdf.zip";
   closeComposeModal();
 
   setStatus("Validating…");
@@ -275,13 +290,15 @@ document.getElementById("btn-compose-go").addEventListener("click", async () => 
     await api.saveScene(path, yamlText);
     setStatus("Composing…");
     const blob = await api.composeZip(path, { fullRobots, fullTools });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = downloadName;
-    a.click();
-    URL.revokeObjectURL(url);
-    setStatus(`Compose complete; downloaded ${downloadName}.`);
+    downloadBlob(blob, downloadName);
+    if (urdfBundle) {
+      setStatus("Bundling source URDFs…");
+      const bundle = await api.composeUrdfBundle(path);
+      downloadBlob(bundle, bundleName);
+      setStatus(`Compose complete; downloaded ${downloadName} + ${bundleName}.`);
+    } else {
+      setStatus(`Compose complete; downloaded ${downloadName}.`);
+    }
   } catch (e) {
     setStatus("Compose failed: " + e.message);
   }

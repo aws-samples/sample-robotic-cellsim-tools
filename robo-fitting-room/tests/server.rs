@@ -273,6 +273,40 @@ async fn compose_returns_zip() {
 }
 
 #[tokio::test]
+async fn compose_urdf_bundle_returns_zip() {
+    let (base, _dir) = spawn_server().await;
+    let resp = rq()
+        .post(format!(
+            "{}/api/v1/compose-urdf-bundle?manifest_path=fitted-robots/scene.yaml",
+            base
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert!(resp.status().is_success(), "{}", resp.status());
+    let ct = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    assert_eq!(ct, "application/zip", "wrong content-type");
+    let bytes = resp.bytes().await.unwrap();
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "first 4 bytes should be PK header");
+
+    // Unzip in memory: expect the scene YAML + at least one bundled URDF.
+    let reader = std::io::Cursor::new(bytes.to_vec());
+    let mut z = zip::ZipArchive::new(reader).unwrap();
+    let names: Vec<String> = (0..z.len()).map(|i| z.by_index(i).unwrap().name().to_string()).collect();
+    assert!(names.iter().any(|n| n.ends_with(".yaml")), "names: {:?}", names);
+    assert!(
+        names.iter().any(|n| n.starts_with("robots/") && n.ends_with(".urdf")),
+        "expected a bundled robot URDF, names: {:?}",
+        names
+    );
+}
+
+#[tokio::test]
 async fn upload_obj_round_trips_and_appears_in_listing() {
     let (base, _dir) = spawn_server().await;
     let form = reqwest::multipart::Form::new()

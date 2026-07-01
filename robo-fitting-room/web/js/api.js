@@ -73,6 +73,14 @@ export async function composeZip(manifestPath, opts = {}) {
   }))).blob();
 }
 
+/** Returns a Blob of the self-contained URDF-source bundle zip. */
+export async function composeUrdfBundle(manifestPath) {
+  const params = new URLSearchParams({ manifest_path: manifestPath });
+  return (await ok(await fetch("/api/compose-urdf-bundle?" + params, {
+    method: "POST",
+  }))).blob();
+}
+
 export async function uploadObj(file, filename) {
   const fd = new FormData();
   fd.append("filename", filename);

@@ -198,6 +198,52 @@
         }
       }
     },
+    "/api/v1/compose-urdf-bundle": {
+      "post": {
+        "tags": [
+          "compose"
+        ],
+        "summary": "POST /api/v1/compose-urdf-bundle?manifest_path=... — build the",
+        "description": "self-contained URDF-source bundle for a manifest already on disk under\n`asset_root` and stream it back as `application/zip`. The bundle holds the\nscene YAML (rewritten to reference the URDFs by relative path) plus every\nsource URDF copied verbatim (each in its own folder with its `meshes/`\nsubtree) and the floor-plan OBJ when present. This is a SEPARATE artifact\nfrom `/compose`; the editor calls both when the user opts in.",
+        "operationId": "compose_urdf_bundle_zip",
+        "parameters": [
+          {
+            "name": "manifest_path",
+            "in": "query",
+            "description": "Path under asset_root pointing at an existing manifest YAML.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "URDF-source bundle zip"
+          },
+          "400": {
+            "description": "Manifest path / validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Bundle build failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/floor-plan": {
       "post": {
         "tags": [
@@ -711,6 +757,19 @@
           },
           "stored_path": {
             "type": "string"
+          }
+        }
+      },
+      "UrdfBundleQuery": {
+        "type": "object",
+        "description": "Query parameters for the URDF-source bundle. The compose fidelity flags\n(`full_robots`/`full_tools`) are USDA-only knobs and don't apply here, so\nthis endpoint takes just the manifest path.",
+        "required": [
+          "manifest_path"
+        ],
+        "properties": {
+          "manifest_path": {
+            "type": "string",
+            "description": "Path under asset_root pointing at an existing manifest YAML."
           }
         }
       },

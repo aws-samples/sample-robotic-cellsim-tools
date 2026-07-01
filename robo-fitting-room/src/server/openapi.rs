@@ -17,7 +17,7 @@ use crate::server::dto::{
     PathQuery, ReadinessDto, SaveResponse, ScenePathBody, UploadResponse, UrdfJointsResponse,
     ValidateResponse,
 };
-use crate::server::handlers::compose::ComposeQuery;
+use crate::server::handlers::compose::{ComposeQuery, UrdfBundleQuery};
 use crate::server::state::AppState;
 
 #[derive(OpenApi)]
@@ -40,6 +40,7 @@ use crate::server::state::AppState;
         crate::server::handlers::floor_plan::segments,
         crate::server::handlers::compose::validate,
         crate::server::handlers::compose::compose_zip,
+        crate::server::handlers::compose::compose_urdf_bundle_zip,
         crate::server::handlers::scene::load,
         crate::server::handlers::scene::save,
         crate::server::handlers::health::healthz,
@@ -57,6 +58,7 @@ use crate::server::state::AppState;
         UploadResponse,
         SaveResponse,
         ComposeQuery,
+        UrdfBundleQuery,
         ErrorEnvelope,
         HealthDto,
         ReadinessDto,

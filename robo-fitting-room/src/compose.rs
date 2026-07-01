@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use urdf_robo_dresser::{
@@ -316,6 +316,410 @@ struct MeshStats {
     mesh_count: usize,
     total_vertices: usize,
     total_faces: usize,
+}
+
+// =============================================================================
+// URDF-source bundle export (additive — does NOT touch USDA composition above).
+// Produces a SECOND, self-contained zip: the scene YAML (rewritten to reference
+// bundled URDFs by relative path) + every referenced source URDF copied
+// byte-for-byte (each in its own folder with its `meshes/` subtree) + the
+// floor-plan OBJ when present. Extract it anywhere and `parse_scene` on the
+// bundled YAML resolves every asset locally.
+// =============================================================================
+
+#[derive(Debug, Clone)]
+pub struct UrdfBundleReport {
+    pub zip_path: PathBuf,
+    pub scene_yaml_name: String,
+    pub robot_urdf_count: usize,
+    pub fixture_urdf_count: usize,
+    pub bundle_dir_count: usize,
+    pub floor_plan_bundled: bool,
+    pub file_count: usize,
+    pub zip_bytes: u64,
+}
+
+/// A distinct URDF directory to copy into the bundle, plus the zip folder it
+/// was assigned. Keyed in the caller by the canonicalised URDF directory so
+/// two placements sharing one dressed URDF collapse to a single entry.
+struct BundleEntry {
+    /// Directory to copy from (the URDF's own parent dir), as originally resolved.
+    src_dir: PathBuf,
+    /// Absolute path to the `.urdf` file itself.
+    urdf_file: PathBuf,
+    /// Assigned bundle folder name (unique within its section).
+    folder: String,
+}
+
+// FR-147, FR-148
+/// Build the URDF-source bundle zip. `manifest_path` is read verbatim to
+/// recover the authored YAML (incl. floor-plan path + fields the in-memory
+/// `SceneDefinition` doesn't retain); only path fields are rewritten.
+pub fn compose_urdf_bundle(
+    scene: &SceneDefinition,
+    manifest_path: &Path,
+    out_path: &Path,
+) -> Result<UrdfBundleReport, FittingRoomError> {
+    let ext = out_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    if ext != "zip" {
+        return Err(FittingRoomError::UnsupportedFormat(format!(
+            ".{} (only .zip is supported)",
+            ext
+        )));
+    }
+
+    let manifest_dir = manifest_path.parent().unwrap_or_else(|| Path::new("."));
+    let manifest_stem = manifest_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.trim_start_matches('.').trim_start_matches("__compose_"))
+        .map(|s| s.trim_start_matches('.'))
+        .filter(|s| !s.is_empty())
+        .unwrap_or("scene")
+        .to_string();
+    let scene_yaml_name = format!("{}.yaml", manifest_stem);
+
+    // Collect + dedup URDF dirs, keyed by canonical dir. Robots under `urdf/`,
+    // fixtures under `fixtures/`, so the two sections never collide.
+    let robot_urdfs: Vec<&Path> = scene.robots.iter().map(|r| r.dressed_urdf.as_path()).collect();
+    let fixture_urdfs: Vec<&Path> = scene.fixtures.iter().map(|f| f.urdf.as_path()).collect();
+    let robot_entries = collect_bundle_entries(&robot_urdfs)?;
+    let fixture_entries = collect_bundle_entries(&fixture_urdfs)?;
+
+    // Reject any URDF whose meshes escape its own directory — such a ref can't
+    // be made self-contained by a whole-dir copy. Read-only inspection.
+    for entry in robot_entries.values().chain(fixture_entries.values()) {
+        check_urdf_meshes_local(&entry.urdf_file)?;
+    }
+
+    // canonical URDF dir -> zip-relative folder (e.g. "robots/foo"), used to
+    // rewrite the YAML path fields to match where files actually landed.
+    let mut robot_dir_to_folder: BTreeMap<PathBuf, String> = BTreeMap::new();
+    for (canon, e) in &robot_entries {
+        robot_dir_to_folder.insert(canon.clone(), format!("robots/{}", e.folder));
+    }
+    let mut fixture_dir_to_folder: BTreeMap<PathBuf, String> = BTreeMap::new();
+    for (canon, e) in &fixture_entries {
+        fixture_dir_to_folder.insert(canon.clone(), format!("fixtures/{}", e.folder));
+    }
+
+    // Floor plan: recover its source OBJ path from the manifest YAML (the
+    // in-memory FloorPlan struct doesn't keep it) and bundle it under
+    // `floorplans/<stem>/<basename>` so it mirrors the robots/ + fixtures/
+    // per-item-subfolder layout.
+    let manifest_bytes = std::fs::read(manifest_path).map_err(|e| {
+        FittingRoomError::UsdWrite(format!("read manifest {}: {}", manifest_path.display(), e))
+    })?;
+    let manifest_yaml = String::from_utf8_lossy(&manifest_bytes).into_owned();
+    let floor_plan_src = floor_plan_geometry_file(&manifest_yaml);
+    let floor_plan_target = floor_plan_src.as_ref().and_then(|rel| {
+        let name = Path::new(rel).file_name()?.to_string_lossy().into_owned();
+        let stem = Path::new(rel)
+            .file_stem()
+            .map(|s| sanitize_path_segment(&s.to_string_lossy()))
+            .unwrap_or_else(|| "plan".to_string());
+        Some(format!("floorplans/{}/{}", stem, name))
+    });
+
+    // Rewrite the scene YAML path fields (only). Everything else is preserved.
+    let rewritten_yaml = rewrite_scene_yaml_paths(
+        &manifest_yaml,
+        &robot_dir_to_folder,
+        &fixture_dir_to_folder,
+        manifest_dir,
+        floor_plan_target.as_deref(),
+    )?;
+
+    let zip_file = File::create(out_path).map_err(|e| {
+        FittingRoomError::UsdWrite(format!("create {}: {}", out_path.display(), e))
+    })?;
+    let mut zip = zip::ZipWriter::new(zip_file);
+    let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    let mut file_count = 0usize;
+
+    // 1. Scene YAML first.
+    zip.start_file(&scene_yaml_name, opts)
+        .map_err(|e| FittingRoomError::UsdWrite(format!("zip scene yaml entry: {}", e)))?;
+    zip.write_all(rewritten_yaml.as_bytes())
+        .map_err(|e| FittingRoomError::UsdWrite(format!("write scene yaml: {}", e)))?;
+    file_count += 1;
+
+    // 2. Robot URDF dirs (BTreeMap = sorted = deterministic), then fixtures.
+    for e in robot_entries.values() {
+        file_count += add_dir_to_zip(&mut zip, opts, &e.src_dir, &format!("robots/{}", e.folder))?;
+    }
+    for e in fixture_entries.values() {
+        file_count +=
+            add_dir_to_zip(&mut zip, opts, &e.src_dir, &format!("fixtures/{}", e.folder))?;
+    }
+
+    // 3. Floor-plan OBJ last.
+    let mut floor_plan_bundled = false;
+    if let (Some(src_rel), Some(target)) = (&floor_plan_src, &floor_plan_target) {
+        let src = manifest_dir.join(src_rel);
+        let bytes = std::fs::read(&src).map_err(|e| {
+            FittingRoomError::FloorPlanNotFound(format!("{}: {}", src.display(), e))
+        })?;
+        zip.start_file(target.as_str(), opts)
+            .map_err(|e| FittingRoomError::UsdWrite(format!("zip floor-plan entry: {}", e)))?;
+        zip.write_all(&bytes)
+            .map_err(|e| FittingRoomError::UsdWrite(format!("write floor-plan: {}", e)))?;
+        file_count += 1;
+        floor_plan_bundled = true;
+    }
+
+    zip.finish()
+        .map_err(|e| FittingRoomError::UsdWrite(format!("zip finalize: {}", e)))?;
+    let zip_bytes = std::fs::metadata(out_path).map(|m| m.len()).unwrap_or(0);
+
+    Ok(UrdfBundleReport {
+        zip_path: out_path.to_path_buf(),
+        scene_yaml_name,
+        robot_urdf_count: robot_entries.len(),
+        fixture_urdf_count: fixture_entries.len(),
+        bundle_dir_count: robot_entries.len() + fixture_entries.len(),
+        floor_plan_bundled,
+        file_count,
+        zip_bytes,
+    })
+}
+
+/// Dedup URDF paths by canonical directory and assign a deterministic,
+/// path-safe folder name per distinct directory. Collisions between different
+/// source dirs get a numeric suffix in sorted-key order.
+fn collect_bundle_entries(
+    urdfs: &[&Path],
+) -> Result<BTreeMap<PathBuf, BundleEntry>, FittingRoomError> {
+    // canonical dir -> (src_dir, urdf_file)
+    let mut dirs: BTreeMap<PathBuf, (PathBuf, PathBuf)> = BTreeMap::new();
+    for urdf in urdfs {
+        let src_dir = urdf
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let canon_dir = std::fs::canonicalize(&src_dir).unwrap_or_else(|_| src_dir.clone());
+        dirs.entry(canon_dir)
+            .or_insert_with(|| (src_dir.clone(), urdf.to_path_buf()));
+    }
+
+    let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out: BTreeMap<PathBuf, BundleEntry> = BTreeMap::new();
+    for (canon, (src_dir, urdf_file)) in dirs {
+        // Base name from the dir; fall back to the URDF file stem.
+        let base = src_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .or_else(|| urdf_file.file_stem().and_then(|s| s.to_str()))
+            .unwrap_or("urdf");
+        let sanitized = sanitize_path_segment(base);
+        let mut folder = sanitized.clone();
+        let mut n = 2;
+        while used.contains(&folder) {
+            folder = format!("{}-{}", sanitized, n);
+            n += 1;
+        }
+        used.insert(folder.clone());
+        out.insert(
+            canon,
+            BundleEntry {
+                src_dir,
+                urdf_file,
+                folder,
+            },
+        );
+    }
+    Ok(out)
+}
+
+/// Verify every `<mesh>` in the URDF resolves inside the URDF's own directory.
+/// A mesh referenced by an absolute path or via `..` can't be captured by a
+/// whole-dir copy, so the bundle wouldn't be self-contained — reject it.
+fn check_urdf_meshes_local(urdf_file: &Path) -> Result<(), FittingRoomError> {
+    let urdf_dir = urdf_file.parent().unwrap_or_else(|| Path::new("."));
+    let canon_dir = std::fs::canonicalize(urdf_dir).unwrap_or_else(|_| urdf_dir.to_path_buf());
+    let robot = parse_urdf(urdf_file)
+        .map_err(|e| FittingRoomError::UrdfParse(format!("{}: {}", urdf_file.display(), e)))?;
+    for link in &robot.links {
+        let metas = link
+            .visuals
+            .iter()
+            .map(|v| &v.geometry)
+            .chain(link.collisions.iter().map(|c| &c.geometry));
+        for geom in metas {
+            if let Geometry::Mesh { filename, .. } = geom {
+                let p = Path::new(filename);
+                if p.is_absolute() {
+                    return Err(FittingRoomError::Validation(format!(
+                        "URDF {} references mesh by absolute path ({}); cannot build a \
+                         self-contained bundle",
+                        urdf_file.display(),
+                        filename
+                    )));
+                }
+                let joined = urdf_dir.join(filename);
+                let canon = std::fs::canonicalize(&joined).unwrap_or(joined);
+                if !canon.starts_with(&canon_dir) {
+                    return Err(FittingRoomError::Validation(format!(
+                        "URDF {} references mesh outside its directory ({}); cannot build a \
+                         self-contained bundle",
+                        urdf_file.display(),
+                        filename
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recursively copy every file under `src_root` into the zip beneath
+/// `zip_prefix`, byte-for-byte. Directory entries are sorted so the output is
+/// deterministic. Symlinks are skipped with a warning. Returns files written.
+fn add_dir_to_zip<W: Write + Seek>(
+    zip: &mut zip::ZipWriter<W>,
+    opts: SimpleFileOptions,
+    src_root: &Path,
+    zip_prefix: &str,
+) -> Result<usize, FittingRoomError> {
+    let mut count = 0usize;
+    // Stack of (dir, zip-prefix-for-dir). Sort children per directory.
+    let mut stack: Vec<(PathBuf, String)> = vec![(src_root.to_path_buf(), zip_prefix.to_string())];
+    while let Some((dir, prefix)) = stack.pop() {
+        let mut children: Vec<std::fs::DirEntry> = std::fs::read_dir(&dir)
+            .map_err(|e| {
+                FittingRoomError::UsdWrite(format!("read dir {}: {}", dir.display(), e))
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| {
+                FittingRoomError::UsdWrite(format!("read dir {}: {}", dir.display(), e))
+            })?;
+        children.sort_by_key(|e| e.file_name());
+        // Process in sorted order. Push subdirs so they pop in order too; files
+        // are written immediately.
+        let mut subdirs: Vec<(PathBuf, String)> = Vec::new();
+        for child in children {
+            let name = child.file_name();
+            let name = name.to_string_lossy();
+            let meta = child.metadata().map_err(|e| {
+                FittingRoomError::UsdWrite(format!("stat {}: {}", child.path().display(), e))
+            })?;
+            if meta.file_type().is_symlink() {
+                log::warn!("skipping symlink in bundle: {}", child.path().display());
+                continue;
+            }
+            let entry_zip_path = format!("{}/{}", prefix, name);
+            if meta.is_dir() {
+                subdirs.push((child.path(), entry_zip_path));
+            } else {
+                let bytes = std::fs::read(child.path()).map_err(|e| {
+                    FittingRoomError::UsdWrite(format!(
+                        "read {}: {}",
+                        child.path().display(),
+                        e
+                    ))
+                })?;
+                zip.start_file(entry_zip_path.as_str(), opts).map_err(|e| {
+                    FittingRoomError::UsdWrite(format!("zip entry {}: {}", entry_zip_path, e))
+                })?;
+                zip.write_all(&bytes).map_err(|e| {
+                    FittingRoomError::UsdWrite(format!("write {}: {}", entry_zip_path, e))
+                })?;
+                count += 1;
+            }
+        }
+        // Reverse so popping the stack visits subdirs in sorted order.
+        for sd in subdirs.into_iter().rev() {
+            stack.push(sd);
+        }
+    }
+    Ok(count)
+}
+
+/// Extract `floor_plan.geometry_file` (a relative path string) from the raw
+/// manifest YAML, if present. Uses a loose `serde_yaml::Value` walk so the rest
+/// of the manifest shape is irrelevant.
+fn floor_plan_geometry_file(manifest_yaml: &str) -> Option<String> {
+    let doc: serde_yaml::Value = serde_yaml::from_str(manifest_yaml).ok()?;
+    doc.get("floor_plan")?
+        .get("geometry_file")?
+        .as_str()
+        .map(|s| s.to_string())
+}
+
+/// Re-serialise the manifest with only the URDF/fixture/floor-plan path fields
+/// pointed at their bundled locations. Parsing to `serde_yaml::Value` (not the
+/// Deserialize-only scene structs) preserves scene_origin, home_pose_deg,
+/// pedestal, offsets, description, and any other keys verbatim.
+fn rewrite_scene_yaml_paths(
+    manifest_yaml: &str,
+    robot_dir_to_folder: &BTreeMap<PathBuf, String>,
+    fixture_dir_to_folder: &BTreeMap<PathBuf, String>,
+    manifest_dir: &Path,
+    floor_plan_target: Option<&str>,
+) -> Result<String, FittingRoomError> {
+    use serde_yaml::Value;
+
+    let mut doc: Value = serde_yaml::from_str(manifest_yaml)
+        .map_err(|e| FittingRoomError::SceneParse(format!("yaml parse: {}", e)))?;
+
+    // Map an authored URDF path (relative to the manifest dir) to its bundled
+    // location by resolving to the canonical directory and looking it up.
+    let bundled_path = |raw: &str, map: &BTreeMap<PathBuf, String>| -> Option<String> {
+        let joined = manifest_dir.join(raw);
+        let dir = joined.parent()?.to_path_buf();
+        let canon_dir = std::fs::canonicalize(&dir).unwrap_or(dir);
+        let folder = map.get(&canon_dir)?;
+        let file = Path::new(raw).file_name()?.to_string_lossy().into_owned();
+        Some(format!("{}/{}", folder, file))
+    };
+
+    if let Some(robots) = doc.get_mut("robots").and_then(Value::as_sequence_mut) {
+        for r in robots {
+            if let Some(raw) = r.get("dressed_urdf").and_then(Value::as_str) {
+                if let Some(new_path) = bundled_path(raw, robot_dir_to_folder) {
+                    r["dressed_urdf"] = Value::String(new_path);
+                }
+            }
+        }
+    }
+    if let Some(fixtures) = doc.get_mut("fixtures").and_then(Value::as_sequence_mut) {
+        for f in fixtures {
+            if let Some(raw) = f.get("urdf").and_then(Value::as_str) {
+                if let Some(new_path) = bundled_path(raw, fixture_dir_to_folder) {
+                    f["urdf"] = Value::String(new_path);
+                }
+            }
+        }
+    }
+    if let Some(target) = floor_plan_target {
+        if let Some(fp) = doc.get_mut("floor_plan") {
+            if fp.get("geometry_file").is_some() {
+                fp["geometry_file"] = Value::String(target.to_string());
+            }
+        }
+    }
+
+    serde_yaml::to_string(&doc)
+        .map_err(|e| FittingRoomError::UsdWrite(format!("yaml serialize: {}", e)))
+}
+
+/// Sanitise a string into a single, filesystem/zip-safe path segment:
+/// ASCII alphanumerics, `_`, `-` kept; everything else becomes `_`. Never
+/// empty, never `.`/`..`.
+fn sanitize_path_segment(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+            out.push(c);
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() || out == "." || out == ".." {
+        out = "urdf".to_string();
+    }
+    out
 }
 
 /// PhysicsScene tuned for a multi-robot scene. Schema set and capacities mirror

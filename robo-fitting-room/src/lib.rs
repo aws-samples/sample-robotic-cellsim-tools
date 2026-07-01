@@ -11,7 +11,10 @@ pub mod scene;
 #[cfg(feature = "server")]
 pub mod server;
 
-pub use compose::{compose_stage, compose_stage_with_options, ComposeOptions, ComposeReport};
+pub use compose::{
+    compose_stage, compose_stage_with_options, compose_urdf_bundle, ComposeOptions, ComposeReport,
+    UrdfBundleReport,
+};
 pub use error::FittingRoomError;
 pub use floor_plan::FloorPlan;
 pub use scene::{

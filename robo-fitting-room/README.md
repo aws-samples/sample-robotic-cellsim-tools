@@ -60,6 +60,62 @@ In Isaac Sim 5.1+, `unzip` and **File → Open** the `.usda`. Hit Play;
 the 8 robots load stowed in their home pose, ROS 2 topics start
 publishing.
 
+### Also emit a URDF source bundle
+
+Pass `--urdf-bundle` to write a **second** zip next to the USDA one: a
+self-contained package of the scene's *source* URDFs — every dressed
+URDF copied byte-for-byte (each in its own folder with its `meshes/`
+subtree), the floor-plan OBJ, and the scene YAML rewritten to reference
+them by relative path. Extract it anywhere and it stands alone. The
+USDA output is unchanged.
+
+```sh
+# Compose the 2-robot challenge cell, USDA zip + URDF source bundle
+./target/release/robo-fitting-room compose \
+    --manifest ../assets/fitted-robots/scene.yaml \
+    --output   ../assets/fitted-robots/2-robot-challenge.zip \
+    --urdf-bundle
+```
+
+The bundle path is derived from `--output` by inserting a `-urdf`
+suffix, so this run produces two files in `assets/fitted-robots/`:
+
+```
+2-robot-challenge.zip        # USDA stage (inlined) + manifest
+2-robot-challenge-urdf.zip   # scene.yaml + robots/ + fixtures/ + floorplans/
+```
+
+```
+Written: ../assets/fitted-robots/2-robot-challenge.zip (2 robots, 1 fixtures, 5557 floor-plan segments)
+  Zip: 21192514 bytes (usda: 104369838 bytes)
+Bundling source URDFs → ../assets/fitted-robots/2-robot-challenge-urdf.zip ...
+Written: ../assets/fitted-robots/2-robot-challenge-urdf.zip (1 robot URDFs, 1 fixture URDFs, 1824 files, floor plan: yes)
+  Bundle zip: 20433974 bytes
+```
+
+Both robots in this scene share one dressed URDF, so the bundle
+deduplicates them into a single `robots/kr240r2900__sticktool/` folder.
+The extracted `2-robot-challenge-urdf.zip` layout — `robots/`,
+`fixtures/`, and `floorplans/` at the top level, one subfolder per item:
+
+```
+2-robot-challenge-urdf/
+├── scene.yaml                                   # paths rewritten: robots/… fixtures/… floorplans/…
+├── robots/kr240r2900__sticktool/               # deduped robot (referenced by both R1 and R2)
+│   ├── kr240r2900__sticktool.urdf
+│   └── meshes/{robot,tool}/…
+├── fixtures/GEO_URW_OP3230/
+│   ├── GEO_URW_OP3230.urdf
+│   └── meshes/…
+└── floorplans/k8urw11-floor-plan/
+    └── k8urw11-floor-plan.obj
+```
+
+In the 2D editor, the **Generate USDA** dialog exposes an equivalent
+*"Also download URDF source bundle"* checkbox; over REST it's a
+separate `POST /api/v1/compose-urdf-bundle?manifest_path=…` streaming
+the bundle zip.
+
 ## Quick start — server + 2D editor
 
 ```sh

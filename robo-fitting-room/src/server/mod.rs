@@ -44,6 +44,10 @@ pub fn router(state: AppState) -> Router {
         .route("/floor-plan", post(handlers::floor_plan::segments))
         .route("/validate", post(handlers::compose::validate))
         .route("/compose", post(handlers::compose::compose_zip))
+        .route(
+            "/compose-urdf-bundle",
+            post(handlers::compose::compose_urdf_bundle_zip),
+        )
         .route("/scenes/load", post(handlers::scene::load))
         .route("/scenes/save", post(handlers::scene::save));
 
@@ -61,6 +65,10 @@ pub fn router(state: AppState) -> Router {
         .route("/floor-plan", post(handlers::floor_plan::segments))
         .route("/validate", post(handlers::compose::validate))
         .route("/compose", post(handlers::compose::compose_zip))
+        .route(
+            "/compose-urdf-bundle",
+            post(handlers::compose::compose_urdf_bundle_zip),
+        )
         .route("/scenes/load", post(handlers::scene::load))
         .route("/scenes/save", post(handlers::scene::save))
         .layer(SetResponseHeaderLayer::if_not_present(

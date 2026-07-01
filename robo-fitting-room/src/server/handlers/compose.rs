@@ -5,7 +5,7 @@ use axum::extract::{Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 
-use crate::compose::{compose_stage_with_options, ComposeOptions};
+use crate::compose::{compose_stage_with_options, compose_urdf_bundle, ComposeOptions};
 use crate::scene::{parse_scene, parse_scene_from_yaml, validate_scene};
 use crate::server::dto::ValidateResponse;
 use crate::server::error::ApiError;
@@ -139,6 +139,85 @@ pub async fn compose_zip(
     let _ = tokio::fs::remove_file(&zip_path).await;
 
     let download_name = format!("{}.zip", stem);
+    let body = Bytes::from(bytes);
+    let resp = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/zip")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", download_name),
+        )
+        .body(body.into_response().into_body())
+        .map_err(|e| ApiError::internal("response_build_failed", e.to_string()))?;
+    Ok(resp)
+}
+
+/// Query parameters for the URDF-source bundle. The compose fidelity flags
+/// (`full_robots`/`full_tools`) are USDA-only knobs and don't apply here, so
+/// this endpoint takes just the manifest path.
+#[derive(Debug, serde::Deserialize, utoipa::ToSchema, utoipa::IntoParams)]
+pub struct UrdfBundleQuery {
+    /// Path under asset_root pointing at an existing manifest YAML.
+    pub manifest_path: String,
+}
+
+/// POST /api/v1/compose-urdf-bundle?manifest_path=... — build the
+/// self-contained URDF-source bundle for a manifest already on disk under
+/// `asset_root` and stream it back as `application/zip`. The bundle holds the
+/// scene YAML (rewritten to reference the URDFs by relative path) plus every
+/// source URDF copied verbatim (each in its own folder with its `meshes/`
+/// subtree) and the floor-plan OBJ when present. This is a SEPARATE artifact
+/// from `/compose`; the editor calls both when the user opts in.
+#[cfg_attr(
+    feature = "server",
+    utoipa::path(
+        post,
+        path = "/api/v1/compose-urdf-bundle",
+        tag = "compose",
+        params(UrdfBundleQuery),
+        responses(
+            (status = 200, description = "URDF-source bundle zip", content_type = "application/zip"),
+            (status = 400, description = "Manifest path / validation failed", body = ErrorEnvelope),
+            (status = 500, description = "Bundle build failure", body = ErrorEnvelope),
+        ),
+    )
+)]
+pub async fn compose_urdf_bundle_zip(
+    State(state): State<AppState>,
+    Query(q): Query<UrdfBundleQuery>,
+) -> Result<Response, ApiError> {
+    let manifest_abs = state
+        .resolve_asset(&q.manifest_path)
+        .map_err(|e| ApiError::bad_request("invalid_manifest_path", e.to_string()))?;
+    let scene = parse_scene(&manifest_abs)
+        .map_err(|e| ApiError::bad_request("manifest_parse_failed", e.to_string()))?;
+    let errs = validate_scene(&scene);
+    if !errs.is_empty() {
+        let joined = errs
+            .into_iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(
+            ApiError::bad_request("manifest_invalid", joined)
+                .with_hint("POST the manifest body to /api/v1/validate to inspect each error"),
+        );
+    }
+
+    // Temp file adjacent to the manifest so relative asset references resolve.
+    let stem = manifest_abs
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("scene");
+    let zip_path: PathBuf = manifest_abs.with_file_name(format!(".__urdf_bundle_{}.zip", stem));
+    compose_urdf_bundle(&scene, &manifest_abs, &zip_path)
+        .map_err(|e| ApiError::internal("bundle_failed", e.to_string()))?;
+    let bytes = tokio::fs::read(&zip_path)
+        .await
+        .map_err(|e| ApiError::internal("zip_read_failed", e.to_string()))?;
+    let _ = tokio::fs::remove_file(&zip_path).await;
+
+    let download_name = format!("{}-urdf.zip", stem);
     let body = Bytes::from(bytes);
     let resp = Response::builder()
         .status(StatusCode::OK)

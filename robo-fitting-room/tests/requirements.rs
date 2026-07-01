@@ -12,8 +12,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use robo_fitting_room::{
-    compose_stage, compose_stage_with_options, parse_scene, validate_scene, ComposeOptions,
-    FixturePlacement, Pedestal, RobotPlacement, SceneDefinition,
+    compose_stage, compose_stage_with_options, compose_urdf_bundle, parse_scene, validate_scene,
+    ComposeOptions, FixturePlacement, Pedestal, RobotPlacement, SceneDefinition,
 };
 
 // =============================================================================
@@ -97,6 +97,15 @@ fn read_zip_entry(zip_path: &Path, entry: &str) -> String {
     let mut s = String::new();
     e.read_to_string(&mut s).unwrap();
     s
+}
+
+/// List every entry name in a zip archive.
+fn zip_entry_names(zip_path: &Path) -> Vec<String> {
+    let f = std::fs::File::open(zip_path).unwrap();
+    let mut z = zip::ZipArchive::new(f).unwrap();
+    (0..z.len())
+        .map(|i| z.by_index(i).unwrap().name().to_string())
+        .collect()
 }
 
 /// Compose a one-robot scene from a kr_like URDF and return (zip_path, usda_text).
@@ -861,6 +870,147 @@ fn fr_146_deterministic_zip() {
     assert_eq!(u1, u2);
 }
 
+/// Build a two-robot (sharing one dressed URDF) + one-fixture + floor-plan
+/// scene on disk and return (scene, manifest_path, tempdir). The manifest YAML
+/// carries scene_origin + home_pose_deg so the rewrite must preserve them.
+fn urdf_bundle_fixture() -> (SceneDefinition, PathBuf, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    // Author the sources under distinct dirs (src-robots/, src-fixtures/,
+    // src-floor/) so the bundled top-level layout (robots/ fixtures/
+    // floorplans/) is provably different from the authored paths.
+    let robot_urdf = dir.path().join("src-robots/kr/kr.urdf");
+    std::fs::create_dir_all(robot_urdf.parent().unwrap()).unwrap();
+    write_kr_like_urdf(&robot_urdf);
+    let fixture_urdf = dir.path().join("src-fixtures/f/f.urdf");
+    std::fs::create_dir_all(fixture_urdf.parent().unwrap()).unwrap();
+    write_fixture_urdf(&fixture_urdf);
+    // Floor plan OBJ.
+    let obj = dir.path().join("src-floor/plan.obj");
+    std::fs::create_dir_all(obj.parent().unwrap()).unwrap();
+    std::fs::write(&obj, "v 0 0 0\nv 1 0 0\nl 1 2\n").unwrap();
+
+    let manifest = dir.path().join("scene.yaml");
+    let yaml = "name: \"bundle\"\n\
+        description: \"desc\"\n\
+        scene_origin: { x: 1.0, y: 2.0, z: 0.0 }\n\
+        robots:\n\
+        \x20 - robot_id: \"R1\"\n\
+        \x20   dressed_urdf: \"src-robots/kr/kr.urdf\"\n\
+        \x20   position: { x: 0.0, y: 0.0, z: 0.0 }\n\
+        \x20   orientation: { a: 0.0, b: 0.0, c: 0.0 }\n\
+        \x20   home_pose_deg: [0, -90, 90, 0, 0, 0]\n\
+        \x20 - robot_id: \"R2\"\n\
+        \x20   dressed_urdf: \"src-robots/kr/kr.urdf\"\n\
+        \x20   position: { x: 5.0, y: 0.0, z: 0.0 }\n\
+        \x20   orientation: { a: 0.0, b: 0.0, c: 0.0 }\n\
+        fixtures:\n\
+        \x20 - id: \"F1\"\n\
+        \x20   urdf: \"src-fixtures/f/f.urdf\"\n\
+        \x20   position: { x: 2.0, y: 2.0, z: 0.0 }\n\
+        \x20   orientation: { a: 0.0, b: 0.0, c: 0.0 }\n\
+        floor_plan:\n\
+        \x20 geometry_file: \"src-floor/plan.obj\"\n\
+        \x20 scale: 1.0\n";
+    std::fs::write(&manifest, yaml).unwrap();
+
+    let scene = parse_scene(&manifest).unwrap();
+    (scene, manifest, dir)
+}
+
+/// FR-147: compose_urdf_bundle produces a self-contained zip — rewritten scene
+/// YAML + deduped source URDFs (own folders, meshes/ preserved) + floor-plan
+/// OBJ; deterministic across runs; extracted YAML validates standalone.
+#[test]
+fn fr_147_urdf_source_bundle() {
+    let (scene, manifest, dir) = urdf_bundle_fixture();
+    let out = dir.path().join("bundle.zip");
+    let report = compose_urdf_bundle(&scene, &manifest, &out).unwrap();
+    assert!(out.exists());
+
+    let names = zip_entry_names(&out);
+    // Scene YAML present.
+    assert!(names.iter().any(|n| n == "scene.yaml"), "names: {:?}", names);
+    // Two robots share one URDF dir → exactly one robot bundle folder.
+    assert_eq!(report.robot_urdf_count, 1);
+    assert_eq!(report.fixture_urdf_count, 1);
+    // The shared robot URDF + its mesh are copied under robots/<folder>/.
+    assert!(names.iter().any(|n| n.starts_with("robots/") && n.ends_with(".urdf")));
+    assert!(names.iter().any(|n| n.starts_with("robots/") && n.contains("meshes/robot/")));
+    // Fixture under fixtures/<folder>/.
+    assert!(names.iter().any(|n| n.starts_with("fixtures/") && n.ends_with(".urdf")));
+    // Floor plan bundled under floorplans/<stem>/<basename>.
+    assert!(report.floor_plan_bundled);
+    assert!(names.iter().any(|n| n == "floorplans/plan/plan.obj"));
+
+    // Rewritten YAML references bundled relative paths and preserves extras.
+    let yaml = read_zip_entry(&out, "scene.yaml");
+    assert!(yaml.contains("robots/"), "expected rewritten robot path: {}", yaml);
+    assert!(yaml.contains("fixtures/"), "expected rewritten fixture path");
+    assert!(yaml.contains("floorplans/plan/plan.obj"), "expected rewritten floor path");
+    assert!(!yaml.contains("src-robots/kr/kr.urdf"), "old path must be rewritten");
+    assert!(yaml.contains("scene_origin"), "scene_origin must be preserved");
+    assert!(yaml.contains("home_pose_deg"), "home_pose_deg must be preserved");
+
+    // Determinism: a second run into a fresh path is byte-identical.
+    let out2 = dir.path().join("bundle2.zip");
+    compose_urdf_bundle(&scene, &manifest, &out2).unwrap();
+    assert_eq!(std::fs::read(&out).unwrap(), std::fs::read(&out2).unwrap());
+
+    // Extracted bundle validates standalone (the decisive self-containedness check).
+    let extract = dir.path().join("extracted");
+    std::fs::create_dir_all(&extract).unwrap();
+    {
+        let f = std::fs::File::open(&out).unwrap();
+        let mut z = zip::ZipArchive::new(f).unwrap();
+        z.extract(&extract).unwrap();
+    }
+    let extracted_scene = parse_scene(&extract.join("scene.yaml")).unwrap();
+    let errors = validate_scene(&extracted_scene);
+    assert!(errors.is_empty(), "extracted bundle should validate: {:?}", errors);
+}
+
+/// FR-148: a URDF referencing a mesh outside its own directory is rejected.
+#[test]
+fn fr_148_bundle_rejects_external_mesh() {
+    let dir = tempfile::tempdir().unwrap();
+    // A mesh that lives OUTSIDE the URDF dir, referenced via `..`.
+    let outside_mesh = dir.path().join("shared/m.obj");
+    write_obj_triangle(&outside_mesh);
+    let urdf = dir.path().join("robot/kr.urdf");
+    std::fs::create_dir_all(urdf.parent().unwrap()).unwrap();
+    let s = "<?xml version=\"1.0\"?>\n<robot name=\"kr\">\n  <link name=\"base\">\n    <visual>\n      <geometry>\n        <mesh filename=\"../shared/m.obj\"/>\n      </geometry>\n    </visual>\n  </link>\n</robot>\n";
+    std::fs::write(&urdf, s).unwrap();
+
+    let manifest = dir.path().join("scene.yaml");
+    std::fs::write(&manifest, "name: \"x\"\nrobots:\n  - robot_id: \"R1\"\n    dressed_urdf: \"robot/kr.urdf\"\n    position: { x: 0.0, y: 0.0, z: 0.0 }\n    orientation: { a: 0.0, b: 0.0, c: 0.0 }\n").unwrap();
+    let scene = parse_scene(&manifest).unwrap();
+    let out = dir.path().join("bundle.zip");
+    let err = compose_urdf_bundle(&scene, &manifest, &out).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("outside its directory") || msg.contains("absolute path"), "got: {}", msg);
+}
+
+/// FR-149: `compose --urdf-bundle` writes a second <stem>-urdf.zip. Exercised
+/// here via the library entry points that back the flag (the CLI wiring only
+/// derives the path + calls compose_urdf_bundle after compose_stage).
+#[test]
+fn fr_149_cli_urdf_bundle_flag() {
+    let (scene, manifest, dir) = urdf_bundle_fixture();
+    // Mirror the CLI: compose the USDA zip, then the derived -urdf.zip.
+    let usda_out = dir.path().join("cell.zip");
+    compose_stage(&scene, &manifest, &usda_out).unwrap();
+    let bundle_out = dir.path().join("cell-urdf.zip");
+    compose_urdf_bundle(&scene, &manifest, &bundle_out).unwrap();
+    assert!(usda_out.exists());
+    assert!(bundle_out.exists());
+    // The two artifacts are distinct: USDA zip has a .usda; bundle has URDFs.
+    let usda_names = zip_entry_names(&usda_out);
+    assert!(usda_names.iter().any(|n| n.ends_with(".usda")));
+    let bundle_names = zip_entry_names(&bundle_out);
+    assert!(bundle_names.iter().any(|n| n.ends_with(".urdf")));
+    assert!(!bundle_names.iter().any(|n| n.ends_with(".usda")));
+}
+
 // =============================================================================
 // 2.6 ActionGraph & ROS2 Preparation
 // =============================================================================
@@ -1361,6 +1511,19 @@ fn fr_186_api_swap() {
 fn fr_187_api_status() {
     todo!("API status — depends on FR-185");
 }
+/// FR-188: `POST /api/compose-urdf-bundle` streams the URDF-source bundle zip →
+/// covered by `tests/server.rs::compose_urdf_bundle_returns_zip`.
+#[test]
+fn fr_188_api_compose_urdf_bundle() {
+    #[cfg(feature = "server")]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    {
+        todo!("Server feature not enabled — run `cargo test --features server --test server`");
+    }
+}
 #[test]
 fn fr_190_sse_broadcast_fanout() {
     todo!("SSE broadcast — BL-17");
@@ -1420,6 +1583,22 @@ fn fr_202_form_based_inspector() {
     #[allow(unreachable_code)]
     {
         todo!("Server feature not enabled");
+    }
+}
+
+/// FR-203: the Generate-USDA modal exposes an optional "Also download URDF
+/// source bundle" checkbox that triggers a second `/api/compose-urdf-bundle`
+/// download. Browser-side; the server endpoint it calls is covered by
+/// `tests/server.rs::compose_urdf_bundle_returns_zip`.
+#[test]
+fn fr_203_editor_urdf_bundle_checkbox() {
+    #[cfg(feature = "server")]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    {
+        todo!("Server feature not enabled — editor SPA only ships with --features server");
     }
 }
 
