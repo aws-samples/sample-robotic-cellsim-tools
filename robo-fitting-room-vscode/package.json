@@ -1,0 +1,96 @@
+{
+  "name": "robo-fitting-room-vscode",
+  "displayName": "robo-fitting-room",
+  "description": "2D scene-layout editor for multi-robot industrial cells, hosted inside VS Code and backed by the robo-fitting-room REST server.",
+  "version": "0.1.1",
+  "publisher": "robotic-cellsim-tools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aws-samples/sample-robotic-cellsim-tools.git",
+    "directory": "robo-fitting-room-vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "robotics",
+    "urdf",
+    "isaac-sim",
+    "scene",
+    "simulation"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "roboFittingRoom.openEditor",
+        "title": "robo-fitting-room: Open Scene Editor",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "roboFittingRoom.startServer",
+        "title": "robo-fitting-room: Start Server"
+      },
+      {
+        "command": "roboFittingRoom.stopServer",
+        "title": "robo-fitting-room: Stop Server"
+      },
+      {
+        "command": "roboFittingRoom.openDocs",
+        "title": "robo-fitting-room: Open Swagger Docs in Browser"
+      }
+    ],
+    "configuration": {
+      "title": "robo-fitting-room",
+      "properties": {
+        "roboFittingRoom.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3040",
+          "description": "Base URL of the running robo-fitting-room REST server."
+        },
+        "roboFittingRoom.binaryPath": {
+          "type": "string",
+          "default": "robo-fitting-room",
+          "description": "Path to the robo-fitting-room binary used by the Start Server command. Defaults to the binary on PATH."
+        },
+        "roboFittingRoom.assetRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Asset root directory passed to `serve --asset-root`. Relative paths resolve against the first workspace folder. Leave empty to be prompted."
+        },
+        "roboFittingRoom.serverHost": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "Host the managed server binds to (serve --host)."
+        },
+        "roboFittingRoom.serverPort": {
+          "type": "number",
+          "default": 3040,
+          "description": "Port the managed server binds to (serve --port)."
+        },
+        "roboFittingRoom.webRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional --web-root passed to the managed server for live SPA editing. Usually left empty."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "./build-vsix.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
