@@ -71,7 +71,7 @@ A status-bar item shows whether a server is reachable.
 | Setting | Default | Purpose |
 |---|---|---|
 | `roboFittingRoom.serverUrl` | `http://localhost:3040` | Base URL of the REST server the editor talks to |
-| `roboFittingRoom.binaryPath` | `robo-fitting-room` | Binary used by *Start Server* (PATH by default) |
+| `roboFittingRoom.binaryPath` | *(empty)* | Binary to spawn. Empty = use the binary bundled in this (architecture-specific) `.vsix`; set an absolute path or a PATH name to override with your own build |
 | `roboFittingRoom.assetRoot` | *(empty)* | `--asset-root` for the managed server; prompted if unset |
 | `roboFittingRoom.serverHost` | `127.0.0.1` | `--host` for the managed server |
 | `roboFittingRoom.serverPort` | `3040` | `--port` for the managed server |
@@ -103,18 +103,40 @@ and use **Start Server**. Or run the server yourself and just point
 
 ## Packaging
 
-Build an installable `.vsix`:
+`build-vsix.sh` produces an **architecture-specific** `.vsix` with the
+native `robo-fitting-room` binary bundled inside it, so end users don't
+need Rust, a separate binary, or any PATH setup — they just install the
+`.vsix` that matches their machine.
 
 ```sh
-./build-vsix.sh              # produces robo-fitting-room-vscode-<version>.vsix
-./build-vsix.sh --install    # also installs it via the `code` CLI
+./build-vsix.sh              # build the .vsix for THIS host's architecture
+./build-vsix.sh --install    # also install it via the `code` CLI
 ```
 
-The script runs `npm install`, compiles, and packages with
-`npx @vscode/vsce package --no-dependencies` (nothing global to
-install). `js-yaml`, used for manifest round-tripping in the webview,
-is vendored as a static asset at `media/vendor/js-yaml.min.js`, so the
-package carries no runtime `node_modules`.
+The filename encodes the platform so you know which one to install:
+
+| Host | Produced file |
+|---|---|
+| Apple Silicon macOS | `robo-fitting-room-vscode-darwin-arm64-<version>.vsix` |
+| Intel macOS | `robo-fitting-room-vscode-darwin-x64-<version>.vsix` |
+| Linux x86-64 | `robo-fitting-room-vscode-linux-x64-<version>.vsix` |
+| Linux arm64 | `robo-fitting-room-vscode-linux-arm64-<version>.vsix` |
+| Windows x86-64 | `robo-fitting-room-vscode-win32-x64-<version>.vsix` |
+
+Each `.vsix` is built for the host it's packaged on (run the script once
+per target platform). The script:
+
+1. `cargo build --release` of `../robo-fitting-room` and copies the
+   binary into `bin/` (override the feature set with
+   `RFR_CARGO_ARGS`, e.g. `RFR_CARGO_ARGS="--no-default-features --features stdio"`
+   for a slimmer stdio-only binary);
+2. `npm install` + `npm run compile`;
+3. `npx @vscode/vsce package --target <platform> --no-dependencies`.
+
+At runtime the extension spawns the bundled `bin/robo-fitting-room`
+(made executable on first use) unless `roboFittingRoom.binaryPath` is set
+to override it. `js-yaml` is vendored at `media/vendor/js-yaml.min.js`, so
+the package carries no runtime `node_modules`.
 
 Install manually instead: VS Code → Extensions → `…` → **Install from
 VSIX…**, or `code --install-extension <file>.vsix`.

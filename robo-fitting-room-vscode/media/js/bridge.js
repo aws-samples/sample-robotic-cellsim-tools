@@ -59,3 +59,18 @@ export function compose(params) {
 export function exportBundle(params) {
   return request({ type: "exportBundle", ...params });
 }
+
+/** Invoke an RPC method on the extension host, which forwards it to the
+ *  stdio-serve backend. Resolves to the method's `result` on success, or
+ *  throws an Error (with `code`/`data` attached from the error envelope)
+ *  when the host returns an `{error}` response. */
+export async function rpc(method, params) {
+  const res = await request({ type: "rpc", method, params });
+  if (res.error) {
+    const err = new Error(res.error.message);
+    err.code = res.error.code;
+    err.data = res.error.data;
+    throw err;
+  }
+  return res.result;
+}

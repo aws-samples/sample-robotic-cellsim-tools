@@ -1,9 +1,21 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-import * as os from "os";
 import { spawn } from "child_process";
-import { ServerManager } from "./server";
+import { StdioClient, StdioRequestError, RpcError } from "./stdioClient";
+
+/**
+ * Result of the `compose.run` / `compose.urdfBundle` stdio methods. The zip
+ * is written to a uniquely named temp file whose absolute path (`zipPath`) is
+ * returned instead of inline bytes, along with a suggested `downloadName` and
+ * its size in `bytes`. Ownership of the temp file transfers to the host, which
+ * moves it to the user-selected destination.
+ */
+interface ComposeArtifact {
+  zipPath: string;
+  downloadName: string;
+  bytes: number;
+}
 
 /** Message shapes exchanged with the webview. */
 interface ComposeRequest {
@@ -30,12 +42,24 @@ interface ExportBundleRequest {
   requestId: number;
   manifestPath: string;
 }
+/**
+ * Generic RPC passthrough from the webview's `bridge.rpc(method, params)`
+ * helper. Forwarded to the managed stdio child process; the reply echoes
+ * `requestId` with either a `result` or an `error`.
+ */
+interface RpcRequest {
+  type: "rpc";
+  requestId: number;
+  method: string;
+  params: unknown;
+}
 
 type InboundMessage =
   | ComposeRequest
   | OpenYamlRequest
   | PromptSaveRequest
-  | ExportBundleRequest;
+  | ExportBundleRequest
+  | RpcRequest;
 
 /**
  * Owns the single scene-editor webview panel and bridges its
@@ -49,10 +73,13 @@ export class EditorPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
 
-  static createOrShow(context: vscode.ExtensionContext, server: ServerManager): void {
+  static createOrShow(context: vscode.ExtensionContext, stdio: StdioClient): void {
     const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
     if (EditorPanel.current) {
       EditorPanel.current.panel.reveal(column);
+      // The backend is running now (openEditor awaited ensureRunning); re-run
+      // the palette load in case it failed when the panel first opened.
+      EditorPanel.current.post({ type: "refreshPalette" });
       return;
     }
     const mediaRoot = vscode.Uri.joinPath(context.extensionUri, "media");
@@ -66,13 +93,13 @@ export class EditorPanel {
         localResourceRoots: [mediaRoot],
       }
     );
-    EditorPanel.current = new EditorPanel(panel, context, server);
+    EditorPanel.current = new EditorPanel(panel, context, stdio);
   }
 
   private constructor(
     panel: vscode.WebviewPanel,
     private readonly context: vscode.ExtensionContext,
-    private readonly server: ServerManager
+    private readonly stdio: StdioClient
   ) {
     this.panel = panel;
     this.panel.webview.html = this.buildHtml();
@@ -98,6 +125,29 @@ export class EditorPanel {
         return this.handleCompose(message);
       case "exportBundle":
         return this.handleExportBundle(message);
+      case "rpc":
+        return this.handleRpc(message);
+    }
+  }
+
+  /**
+   * Forward a generic RPC call from the webview to the managed stdio child
+   * process and post the outcome back, keyed by the same `requestId`. Success
+   * posts `{ requestId, result }`; failure posts `{ requestId, error }` with
+   * the `{code, message, data}` shape `bridge.rpc` expects (it resolves
+   * `res.result` or throws on `res.error`). `StdioRequestError`'s `rpcError`
+   * is forwarded verbatim; any other error is synthesized into an error object.
+   */
+  private async handleRpc(req: RpcRequest): Promise<void> {
+    try {
+      const result = await this.stdio.request(req.method, req.params);
+      this.post({ type: "rpcResult", requestId: req.requestId, result });
+    } catch (e) {
+      this.post({
+        type: "rpcResult",
+        requestId: req.requestId,
+        error: toRpcError(e),
+      });
     }
   }
 
@@ -141,13 +191,29 @@ export class EditorPanel {
   }
 
   private async handleCompose(req: ComposeRequest): Promise<void> {
-    const base = this.server.serverUrl;
+    // Temp artifacts written by the child process that must be cleaned up if
+    // the flow is cancelled or fails before they reach their destination.
+    const orphans: string[] = [];
     try {
-      // Pick the save destination up front so the user isn't surprised
-      // after a long compose.
+      const usda = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "robo-fitting-room" },
+        async (progress) => {
+          progress.report({ message: "Composing USDA…" });
+          return this.stdio.request<
+            { manifestPath: string; fullRobots: boolean; fullTools: boolean },
+            ComposeArtifact
+          >("compose.run", {
+            manifestPath: req.manifestPath,
+            fullRobots: req.fullRobots,
+            fullTools: req.fullTools,
+          });
+        }
+      );
+      orphans.push(usda.zipPath);
+
       const target = await vscode.window.showSaveDialog({
         saveLabel: "Save USDA zip",
-        defaultUri: this.defaultDialogUri(req.downloadName),
+        defaultUri: this.defaultDialogUri(req.downloadName || usda.downloadName),
         filters: { "Zip archive": ["zip"] },
       });
       if (!target) {
@@ -155,58 +221,71 @@ export class EditorPanel {
         return;
       }
 
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: "robo-fitting-room" },
-        async (progress) => {
-          progress.report({ message: "Composing USDA…" });
-          const usdaBytes = await this.composeFetch(
-            `${base}/api/v1/compose?` +
-              new URLSearchParams({
-                manifest_path: req.manifestPath,
-                full_robots: String(req.fullRobots),
-                full_tools: String(req.fullTools),
-              })
-          );
-          await vscode.workspace.fs.writeFile(target, usdaBytes);
+      await moveFile(usda.zipPath, target.fsPath);
+      removeItem(orphans, usda.zipPath);
 
-          let savedBundle: string | undefined;
-          if (req.urdfBundle) {
+      let savedBundle: string | undefined;
+      if (req.urdfBundle) {
+        const bundle = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "robo-fitting-room" },
+          async (progress) => {
             progress.report({ message: "Bundling source URDFs…" });
-            const bundleBytes = await this.composeFetch(
-              `${base}/api/v1/compose-urdf-bundle?` +
-                new URLSearchParams({ manifest_path: req.manifestPath })
+            return this.stdio.request<{ manifestPath: string }, ComposeArtifact>(
+              "compose.urdfBundle",
+              { manifestPath: req.manifestPath }
             );
-            const bundleUri = vscode.Uri.file(
-              path.join(path.dirname(target.fsPath), req.bundleName)
-            );
-            await vscode.workspace.fs.writeFile(bundleUri, bundleBytes);
-            savedBundle = path.basename(bundleUri.fsPath);
           }
+        );
+        orphans.push(bundle.zipPath);
+        const bundleUri = vscode.Uri.file(
+          path.join(path.dirname(target.fsPath), req.bundleName)
+        );
+        await moveFile(bundle.zipPath, bundleUri.fsPath);
+        removeItem(orphans, bundle.zipPath);
+        savedBundle = path.basename(bundleUri.fsPath);
+      }
 
-          const usdaName = path.basename(target.fsPath);
-          const summary = savedBundle
-            ? `Wrote ${usdaName} + ${savedBundle}`
-            : `Wrote ${usdaName}`;
-          this.replyCompose(req, { ok: true, message: summary });
-          const open = await vscode.window.showInformationMessage(
-            summary,
-            "Reveal in Explorer"
-          );
-          if (open === "Reveal in Explorer") {
-            void vscode.commands.executeCommand("revealFileInOS", target);
-          }
-        }
+      const usdaName = path.basename(target.fsPath);
+      const summary = savedBundle
+        ? `Wrote ${usdaName} + ${savedBundle}`
+        : `Wrote ${usdaName}`;
+      this.replyCompose(req, { ok: true, message: summary });
+      const open = await vscode.window.showInformationMessage(
+        summary,
+        "Reveal in Explorer"
       );
+      if (open === "Reveal in Explorer") {
+        void vscode.commands.executeCommand("revealFileInOS", target);
+      }
     } catch (e) {
       const msg = `Compose failed: ${errMsg(e)}`;
       this.replyCompose(req, { ok: false, message: msg });
       vscode.window.showErrorMessage(msg);
+    } finally {
+      // Remove any temp artifacts we never moved to a destination.
+      for (const p of orphans) {
+        void fs.promises.unlink(p).catch(() => undefined);
+      }
     }
   }
 
   private async handleExportBundle(req: ExportBundleRequest): Promise<void> {
-    const base = this.server.serverUrl;
+    // Temp artifact written by the child process; cleaned up if we don't move
+    // or extract it.
+    let orphanZip: string | undefined;
     try {
+      const bundle = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "robo-fitting-room" },
+        async (progress) => {
+          progress.report({ message: "Bundling source URDFs…" });
+          return this.stdio.request<{ manifestPath: string }, ComposeArtifact>(
+            "compose.urdfBundle",
+            { manifestPath: req.manifestPath }
+          );
+        }
+      );
+      orphanZip = bundle.zipPath;
+
       const picked = await vscode.window.showOpenDialog({
         canSelectFiles: false,
         canSelectFolders: true,
@@ -223,36 +302,41 @@ export class EditorPanel {
       // The bundle zip stores entries at its root (scene.yaml, robots/,
       // fixtures/, floorplans/), so extract into a named subfolder to keep
       // the tree self-contained.
-      const stem = path.basename(req.manifestPath).replace(/\.(ya?ml)$/i, "") || "scene";
+      const stem =
+        path.basename(req.manifestPath).replace(/\.(ya?ml)$/i, "") ||
+        req.manifestPath ||
+        "scene";
       const destDir = path.join(picked[0].fsPath, `${stem}-urdf`);
 
-      await vscode.window.withProgress(
+      const written = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: "robo-fitting-room" },
         async (progress) => {
-          progress.report({ message: "Fetching URDF bundle…" });
-          const bytes = await this.composeFetch(
-            `${base}/api/v1/compose-urdf-bundle?` +
-              new URLSearchParams({ manifest_path: req.manifestPath })
-          );
           progress.report({ message: "Extracting…" });
-          const written = await this.writeBundle(bytes, destDir);
-          this.replyExport(req, { ok: true, message: written.message });
-          const open = await vscode.window.showInformationMessage(
-            written.message,
-            "Reveal in Explorer"
-          );
-          if (open === "Reveal in Explorer") {
-            void vscode.commands.executeCommand(
-              "revealFileInOS",
-              vscode.Uri.file(written.revealPath)
-            );
-          }
+          return this.writeBundle(bundle.zipPath, destDir);
         }
       );
+      // writeBundle consumes (moves/deletes) the temp zip, so it's no longer
+      // an orphan to clean up.
+      orphanZip = undefined;
+      this.replyExport(req, { ok: true, message: written.message });
+      const open = await vscode.window.showInformationMessage(
+        written.message,
+        "Reveal in Explorer"
+      );
+      if (open === "Reveal in Explorer") {
+        void vscode.commands.executeCommand(
+          "revealFileInOS",
+          vscode.Uri.file(written.revealPath)
+        );
+      }
     } catch (e) {
       const msg = `Export failed: ${errMsg(e)}`;
       this.replyExport(req, { ok: false, message: msg });
       vscode.window.showErrorMessage(msg);
+    } finally {
+      if (orphanZip) {
+        void fs.promises.unlink(orphanZip).catch(() => undefined);
+      }
     }
   }
 
@@ -261,42 +345,34 @@ export class EditorPanel {
   }
 
   /**
-   * Write the bundle to disk as an extracted folder tree. Falls back to
-   * saving the raw .zip next to the target when `unzip` isn't available,
-   * so the user never loses the export.
+   * Extract a bundle temp zip (`srcZip`, produced by `compose.urdfBundle`)
+   * into `destDir`. Falls back to moving the raw .zip next to the target when
+   * `unzip` isn't available, so the user never loses the export. Either way the
+   * temp zip is consumed (extracted then deleted, or moved), so the caller no
+   * longer owns it after this returns.
    */
   private async writeBundle(
-    bytes: Uint8Array,
+    srcZip: string,
     destDir: string
   ): Promise<{ message: string; revealPath: string }> {
-    const tmpZip = path.join(os.tmpdir(), `rfr-bundle-${Date.now()}.zip`);
-    await fs.promises.writeFile(tmpZip, bytes);
     try {
       await fs.promises.mkdir(destDir, { recursive: true });
-      await unzipTo(tmpZip, destDir);
+      await unzipTo(srcZip, destDir);
       return { message: `Exported URDF bundle → ${destDir}`, revealPath: destDir };
     } catch (e) {
-      // Extraction unavailable/failed — preserve the archive instead.
+      // Extraction unavailable/failed — preserve the archive instead by moving
+      // the temp zip to its final resting place.
       const zipPath = `${destDir}.zip`;
-      await fs.promises.copyFile(tmpZip, zipPath);
+      await moveFile(srcZip, zipPath);
       return {
         message: `Could not extract (${errMsg(e)}); saved archive → ${zipPath}`,
         revealPath: zipPath,
       };
     } finally {
-      void fs.promises.unlink(tmpZip).catch(() => undefined);
+      // On the extraction path the temp zip is no longer needed; on the
+      // fallback path it has already been moved (unlink is then a no-op).
+      void fs.promises.unlink(srcZip).catch(() => undefined);
     }
-  }
-
-  /** POST to a compose endpoint and return the response body as bytes. */
-  private async composeFetch(url: string): Promise<Uint8Array> {
-    const resp = await fetch(url, { method: "POST" });
-    if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
-      throw new Error(`${resp.status} ${resp.statusText}: ${body}`);
-    }
-    const buf = await resp.arrayBuffer();
-    return new Uint8Array(buf);
   }
 
   private replyCompose(req: ComposeRequest, result: { ok: boolean; message: string }): void {
@@ -317,16 +393,16 @@ export class EditorPanel {
       webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, "media", ...p));
     const jsYamlUri = media("vendor", "js-yaml.min.js");
 
-    const serverUrl = this.server.serverUrl;
     const nonce = makeNonce();
-    // connect-src must allow both http and ws forms of the server origin.
+    // The webview no longer issues cross-origin fetch()s — every backend call
+    // is forwarded through the postMessage bridge to the stdio child process —
+    // so no network origin needs to be allowed in connect-src.
     const csp = [
       `default-src 'none'`,
       `img-src ${webview.cspSource} data:`,
       `style-src ${webview.cspSource}`,
       `font-src ${webview.cspSource}`,
       `script-src ${webview.cspSource} 'nonce-${nonce}'`,
-      `connect-src ${serverUrl}`,
     ].join("; ");
 
     return /* html */ `<!doctype html>
@@ -337,9 +413,6 @@ export class EditorPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>robo-fitting-room — scene editor</title>
     <link rel="stylesheet" href="${media("style.css")}" />
-    <script nonce="${nonce}">
-      window.__RFR_SERVER_URL__ = ${JSON.stringify(serverUrl)};
-    </script>
     <script nonce="${nonce}" src="${jsYamlUri}"></script>
   </head>
   <body>
@@ -465,6 +538,47 @@ function makeNonce(): string {
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Project any thrown value into the `{code, message, data}` error envelope the
+ * webview's `bridge.rpc` reads off an `{error}` reply. A `StdioRequestError`
+ * carries the backend's `rpcError` verbatim; anything else (process crash,
+ * timeout, unexpected throw) is synthesized with a generic code and its
+ * message.
+ */
+function toRpcError(e: unknown): RpcError {
+  if (e instanceof StdioRequestError) {
+    return e.rpcError;
+  }
+  return { code: 0, message: errMsg(e) };
+}
+
+/**
+ * Move `src` to `dest`, preferring an atomic `fs.rename`. `rename` fails with
+ * `EXDEV` when the two paths live on different filesystems (a temp file under
+ * the OS temp dir being moved onto another volume is the common case here), so
+ * on that error fall back to a copy followed by unlinking the source.
+ */
+export async function moveFile(src: string, dest: string): Promise<void> {
+  try {
+    await fs.promises.rename(src, dest);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EXDEV") {
+      await fs.promises.copyFile(src, dest);
+      await fs.promises.unlink(src);
+      return;
+    }
+    throw e;
+  }
+}
+
+/** Remove the first occurrence of `value` from `arr`, in place. */
+function removeItem<T>(arr: T[], value: T): void {
+  const i = arr.indexOf(value);
+  if (i >= 0) {
+    arr.splice(i, 1);
+  }
 }
 
 /** Extract `zipPath` into `destDir` using the system `unzip`. Rejects if

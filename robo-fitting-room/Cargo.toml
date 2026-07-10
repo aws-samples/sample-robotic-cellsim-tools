@@ -15,10 +15,10 @@ path = "src/main.rs"
 
 [features]
 # Default-on: a plain `cargo build` / `cargo run` produces the
-# full-featured binary (CLI + REST server + embedded 2D editor SPA).
-# To get the slim CLI-only build (no axum/tokio/utoipa/SPA bundle in
-# the dep graph) pass `--no-default-features`.
-default = ["server"]
+# full-featured binary (CLI + REST server + stdio server + embedded 2D
+# editor SPA). To get the slim CLI-only build (no axum/tokio/utoipa/SPA
+# bundle in the dep graph) pass `--no-default-features`.
+default = ["server", "stdio"]
 # FR-180+: in-binary HTTP server hosting the embedded 2D scene-layout
 # editor + a small REST API over the existing compose pipeline.
 server = [
@@ -33,7 +33,16 @@ server = [
     "dep:mime_guess",
     "dep:utoipa",
     "dep:utoipa-swagger-ui",
+    "dep:http",
 ]
+# `stdio-serve`: a long-running newline-delimited-JSON request/response
+# loop over stdin/stdout, for embedding (e.g. the VS Code extension)
+# without opening a network port. Deliberately minimal: only needs
+# serde_json (+ the plain `http` crate for `ApiError::status`, shared
+# with `server` below) on top of the already-mandatory serde/thiserror
+# deps, so `cargo build --no-default-features --features stdio` never
+# pulls in axum/tokio/tower/utoipa.
+stdio = ["dep:serde_json", "dep:http"]
 # Opt-in test feature: enables `tests/real_assets.rs` which compose
 # scenes against the in-repo `../assets/` directory. The asset tree is
 # vendor-specific and will NOT ship with the open-source release; drop
@@ -42,7 +51,13 @@ server = [
 real-assets = []
 
 [dependencies]
-urdf-robo-dresser = { path = "../urdf-robo-dresser" }
+# `default-features = false`: robo-fitting-room only calls
+# urdf-robo-dresser's always-on parsing/merging functions
+# (`parse_urdf`, `merge`, etc.), never its own `server` feature's axum
+# HTTP surface, so there's no reason for our `stdio`-only build to pull
+# in urdf-robo-dresser's axum/tokio/utoipa dependency graph via its
+# default features.
+urdf-robo-dresser = { path = "../urdf-robo-dresser", default-features = false }
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
@@ -64,8 +79,14 @@ serde_json = { version = "1", optional = true }
 mime_guess = { version = "2", optional = true }
 utoipa = { version = "4", optional = true, features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "7", optional = true, features = ["axum"] }
+# `ApiError`'s status code type, shared by `server` and `stdio`.
+# `axum::http` is a re-export of this same crate, so depending on it
+# directly lets `ApiError`/`AppState` (in `transport_common`) compile
+# without axum, for the `stdio`-only build.
+http = { version = "1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 pretty_assertions = "1"
+proptest = "1.11"

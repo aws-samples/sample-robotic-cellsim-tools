@@ -326,5 +326,15 @@ document.querySelectorAll(".aside-toggle").forEach((btn) => {
   });
 });
 
+// The extension host asks us to reload the palette once the backend is
+// running (e.g. after the asset root is set on a panel that opened before the
+// server was ready). This is separate from bridge.js's request/response
+// listener, which ignores messages without a matching requestId.
+window.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "refreshPalette") {
+    refreshPalette();
+  }
+});
+
 refreshPalette();
 setStatus("Ready. Load a scene YAML, or click an asset in the palette to add it.");

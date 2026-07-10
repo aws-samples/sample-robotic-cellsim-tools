@@ -149,6 +149,34 @@ Routes at a glance:
         #[arg(long)]
         web_root: Option<PathBuf>,
     },
+
+    // -------------------------------------------------------------
+    // Stdio mode — long-running JSON request/response loop (gated on `stdio` feature)
+    // -------------------------------------------------------------
+
+    /// [STDIO] Long-running JSON request/response loop over stdin/stdout.
+    #[cfg(feature = "stdio")]
+    #[command(long_about = "\
+[STDIO] Long-running JSON request/response loop over stdin/stdout.
+
+One JSON object per line in, one JSON object per line out. No
+network socket is opened. Intended for embedding in another
+process (e.g. the VS Code extension) without needing a port.
+Reads until stdin closes (EOF), then exits 0. Every method
+mirrors an `/api/v1/*` route and calls the same library
+functions the CLI and `serve` do.")]
+    StdioServe {
+        /// Root directory containing `urdf-dressed-robots/`,
+        /// `urdf-fixture-collection/`, `floor-plans/`,
+        /// `fitted-robots/`. Every path parameter is sandboxed
+        /// under this — paths with `..` segments are rejected.
+        #[arg(long)]
+        asset_root: PathBuf,
+        /// Accepted for parity with `serve`'s signature but unused:
+        /// `stdio-serve` never serves static SPA assets.
+        #[arg(long)]
+        web_root: Option<PathBuf>,
+    },
 }
 
 fn main() {
@@ -324,6 +352,16 @@ fn main() {
             if let Err(e) = rt.block_on(robo_fitting_room::server::run(
                 &host, port, asset_root, web_root,
             )) {
+                eprintln!("ERROR: {}", e);
+                process::exit(1);
+            }
+        }
+        #[cfg(feature = "stdio")]
+        Command::StdioServe {
+            asset_root,
+            web_root,
+        } => {
+            if let Err(e) = robo_fitting_room::stdio::run(asset_root, web_root) {
                 eprintln!("ERROR: {}", e);
                 process::exit(1);
             }

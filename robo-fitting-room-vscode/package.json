@@ -56,8 +56,8 @@
         },
         "roboFittingRoom.binaryPath": {
           "type": "string",
-          "default": "robo-fitting-room",
-          "description": "Path to the robo-fitting-room binary used by the Start Server command. Defaults to the binary on PATH."
+          "default": "",
+          "description": "Path to the robo-fitting-room binary. Leave empty to use the binary bundled inside this (architecture-specific) extension; set an absolute path or a name on PATH to override with your own build."
         },
         "roboFittingRoom.assetRoot": {
           "type": "string",
@@ -86,11 +86,14 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "./build-vsix.sh"
+    "package": "./build-vsix.sh",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.4.0"
+    "fast-check": "^3.23.2",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.9"
   }
 }
