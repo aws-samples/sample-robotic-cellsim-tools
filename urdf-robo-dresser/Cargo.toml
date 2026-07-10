@@ -35,7 +35,11 @@ tokio = { version = "1", features = ["full"], optional = true }
 axum = { version = "0.7", optional = true }
 tower = { version = "0.5", optional = true }
 tower-http = { version = "0.5", features = ["cors", "set-header"], optional = true }
-rust-embed = { version = "8", optional = true }
+# SPA embedding + content-type detection, mirroring the fitting-room's static
+# serving (include_dir! bundle + mime_guess). No tower-http "fs" feature: the
+# /assets byte route is hand-rolled through AppState::resolve_asset.
+include_dir = { version = "0.7", optional = true }
+mime_guess = { version = "2", optional = true }
 utoipa = { version = "4", features = ["axum_extras"], optional = true }
 utoipa-swagger-ui = { version = "7", features = ["axum"], optional = true }
 uuid = { version = "1", features = ["v4", "serde"], optional = true }
@@ -47,7 +51,7 @@ zip = { version = "2", default-features = false, features = ["deflate"], optiona
 # build (no axum/tokio/utoipa in the dep graph) pass
 # `--no-default-features`.
 default = ["server"]
-server = ["tokio", "axum", "tower", "tower-http", "rust-embed", "utoipa", "utoipa-swagger-ui", "uuid", "zip"]
+server = ["tokio", "axum", "tower", "tower-http", "include_dir", "mime_guess", "utoipa", "utoipa-swagger-ui", "uuid", "zip"]
 viewer = []
 full = ["server", "viewer"]
 # Opt-in test feature: enables `tests/real_assets.rs` which dresses real

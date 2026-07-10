@@ -162,18 +162,20 @@ Examples:
     // Server mode — long-running HTTP service (gated on `server` feature)
     // -------------------------------------------------------------
 
-    /// [SERVER] Boot the HTTP server: REST API at `/api/v1`, Swagger UI at `/docs`.
+    /// [SERVER] Boot the HTTP server: 3D viewer SPA at `/`, REST API at `/api/v1`, Swagger UI at `/docs`.
     #[cfg(feature = "server")]
     #[command(long_about = "\
-[SERVER] Boot the HTTP server: REST API at `/api/v1`, Swagger UI at `/docs`.
+[SERVER] Boot the HTTP server: 3D viewer SPA at `/`, REST API at `/api/v1`,
+Swagger UI at `/docs`.
 
-Runs until killed. The dresser is headless — there is no SPA; `/`
-serves a small landing page linking to `/docs`. Always available in
-default builds; only absent if the binary was built with
+Runs until killed. `/` serves a browser-based WebGL URDF viewer that
+previews robots + tools, runs dressing, and shows the result. Always
+available in default builds; only absent if the binary was built with
 `--no-default-features` (the slim CLI-only profile).
 
 Routes at a glance:
-  GET  /                                landing page
+  GET  /                                3D viewer SPA (embedded)
+  GET  /assets/*path                    raw catalogue bytes (URDF + meshes)
   GET  /docs                            Swagger UI
   GET  /openapi.json                    OpenAPI 3.x spec
   GET  /healthz, /readyz                k8s-shaped probes
@@ -188,6 +190,11 @@ Routes at a glance:
         /// Catalogue root the server scans + sandboxes API requests under.
         #[arg(long)]
         catalogue: PathBuf,
+        /// Serve the SPA from this disk directory instead of the embedded
+        /// bundle — useful when iterating on the viewer's JS without
+        /// rebuilding the binary. Defaults to the compile-time bundle.
+        #[arg(long)]
+        web_root: Option<PathBuf>,
     },
 }
 
@@ -242,7 +249,7 @@ fn main() {
         Command::Validate { path, tool } => cmd_validate(&path, tool),
         Command::List { catalogue, json } => cmd_list(&catalogue, json),
         #[cfg(feature = "server")]
-        Command::Serve { port, catalogue } => cmd_serve(port, &catalogue),
+        Command::Serve { port, catalogue, web_root } => cmd_serve(port, &catalogue, web_root),
     };
 
     process::exit(exit_code);
@@ -486,7 +493,7 @@ fn cmd_list(catalogue: &PathBuf, json: bool) -> i32 {
 }
 
 #[cfg(feature = "server")]
-fn cmd_serve(port: u16, catalogue: &PathBuf) -> i32 {
+fn cmd_serve(port: u16, catalogue: &PathBuf, web_root: Option<PathBuf>) -> i32 {
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -501,6 +508,7 @@ fn cmd_serve(port: u16, catalogue: &PathBuf) -> i32 {
         "127.0.0.1",
         port,
         catalogue.clone(),
+        web_root,
     )) {
         Ok(()) => 0,
         Err(e) => {

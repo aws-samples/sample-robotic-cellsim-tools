@@ -53,7 +53,8 @@ flowchart TD
 ```
 
 Every binary ships two modes: a one-shot CLI and a long-running REST
-server (with an embedded 2D scene editor in `robo-fitting-room`).
+server — with an embedded browser UI in two of them: a 3D URDF viewer in
+`urdf-robo-dresser` and a 2D scene editor in `robo-fitting-room`.
 Default `cargo build` produces both — pick the mode at invocation
 time. `robo-ros-runner` replays a captured joint-angle timeline onto the
 cell's ROS 2 `joint_command` topics, driving the robots in a running sim.
@@ -110,10 +111,13 @@ README linked below.
 Takes a bare robot URDF and a tool URDF, auto-detects the flange, computes the
 correct mounting orientation, generates convex-hull collision geometry, and
 writes a single self-contained **dressed URDF**. One-shot `dress`, catalogue-wide
-`batch`, plus `validate` / `list` and a `serve` REST mode.
+`batch`, plus `validate` / `list` and a `serve` mode that hosts a REST API **and
+a built-in browser 3D URDF viewer** — pick a robot + tool, dress them, and preview
+the result in WebGL (orbit/zoom/pan, collision-hull toggle, joint articulation).
 
 ```sh
 urdf-robo-dresser dress --robot robot.urdf --tool gripper_tool.urdf --output dressed.urdf
+urdf-robo-dresser serve --catalogue ./assets   # then open http://localhost:3030/
 ```
 
 | Robot input | Dressed result |

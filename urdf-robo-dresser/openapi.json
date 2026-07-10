@@ -91,6 +91,41 @@
         }
       }
     },
+    "/api/v1/catalogue/dressed": {
+      "get": {
+        "tags": [
+          "catalogue"
+        ],
+        "summary": "GET /api/v1/catalogue/dressed — already-dressed robots under",
+        "description": "`<catalogue>/urdf-dressed-robots/<combo>/<combo>.urdf`.",
+        "operationId": "list_dressed",
+        "responses": {
+          "200": {
+            "description": "Dressed-robot listing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DressedEntry"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Dressed-robots scan failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/catalogue/robots": {
       "get": {
         "tags": [
@@ -605,6 +640,23 @@
           "ok": {
             "type": "boolean",
             "description": "True iff the dressed URDF + meshes are written to disk under\n`<catalogue>/urdf-dressed-robots/<robot_id>__<tool_id>/`."
+          }
+        }
+      },
+      "DressedEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "urdf_rel"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Combo directory name, i.e. `<robot_id>__<tool_id>`."
+          },
+          "urdf_rel": {
+            "type": "string",
+            "description": "Catalogue-relative path of the dressed URDF — feeds `/assets/<rel>`\nand the browser viewer directly."
           }
         }
       },

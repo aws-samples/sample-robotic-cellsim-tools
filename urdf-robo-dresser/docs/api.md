@@ -87,16 +87,42 @@ error responses are forbidden and would fail the snapshot test.
 | `/api/v1/catalogue` | GET | catalogue | Combined listing of all robots + tools |
 | `/api/v1/catalogue/robots` | GET | catalogue | Robots only |
 | `/api/v1/catalogue/tools` | GET | catalogue | Tools only |
+| `/api/v1/catalogue/dressed` | GET | catalogue | Already-dressed robots under `urdf-dressed-robots/` → `[{name, urdf_rel}]` |
 | `/api/v1/dress` | POST | dress | Merge one robot + one tool by catalogue ID; returns the dressed URDF |
 | `/api/v1/validate` | POST | validate | Validate a URDF by catalogue ID, return diagnostics |
 | `/api/v1/batch` | POST | batch | Long-running permutation merge → `202 Accepted` + job id |
 | `/api/v1/jobs/{id}` | GET | jobs | Poll batch job status |
 | `/api/v1/jobs/{id}/artifact` | GET | jobs | Download finished batch as `application/zip` |
+| `/assets/*path` | GET | — | Raw catalogue bytes (URDF + `.obj`/`.mtl`/`.stl`/`.dae`) for the browser 3D viewer; path-sandboxed via `resolve_asset`. Not in the OpenAPI spec (static route). |
+| `/` (+ fallback) | GET | — | Embedded 3D viewer SPA. Not in the OpenAPI spec (static route). |
 | `/healthz` | GET | system | Liveness probe |
 | `/readyz` | GET | system | Readiness probe |
 
+The `/api/v1/*` endpoints plus the health probes are the documented wire
+contract; the static SPA (`/`) and asset (`/assets/*path`) routes carry no
+`#[utoipa::path]` decorator and are intentionally absent from the spec.
+
 Full request/response schemas are in [`openapi.json`](../openapi.json) and
 the Swagger UI at `/docs`.
+
+## Web UI
+
+`serve` also hosts a built-in single-page 3D viewer at `/` (WebGL, three.js +
+urdf-loader, all vendored — no CDN). Pick a robot and a tool from the catalogue,
+click **Dress**, and preview the dressed robot: orbit/zoom/pan, step the tool
+orientation in 90° increments, and articulate the joints with per-joint sliders.
+It drives the same `/api/v1/*` endpoints documented above and fetches URDF+mesh
+bytes over `/assets/*path`.
+
+After a dress, the inspector shows the **output path** (under
+`urdf-dressed-robots/`) where the result was written. The **Dressed** palette
+section lists every prior dressed robot (`/api/v1/catalogue/dressed`) so you can
+reload one into the viewer without re-dressing. A **Collision hulls** toggle
+overlays the `<collision>` geometry, and the joints panel lists each joint by
+name.
+
+Pass `--web-root <dir>` to `serve` to load the SPA from disk instead of the
+embedded bundle — handy for iterating on the viewer's JS without rebuilding.
 
 ## Catalogue listing
 

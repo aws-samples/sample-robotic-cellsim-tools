@@ -17,16 +17,16 @@
 //!   * POST /api/v1/batch                        kick off a batch job
 //!   * GET  /api/v1/jobs/:id                     poll a batch job
 //!   * GET  /api/v1/jobs/:id/artifact            download the batch zip
+//!   * GET  /assets/*path                        raw catalogue bytes (URDF + meshes)
 //!   * GET  /healthz                             liveness
 //!   * GET  /readyz                              readiness
 //!   * GET  /openapi.json                        spec
 //!   * GET  /docs                                Swagger UI
+//!   * GET  /  (+ fallback)                      embedded SPA (3D URDF viewer)
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use axum::http::header;
-use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/catalogue", get(handlers::catalogue::list_all))
         .route("/catalogue/robots", get(handlers::catalogue::list_robots))
         .route("/catalogue/tools", get(handlers::catalogue::list_tools))
+        .route("/catalogue/dressed", get(handlers::catalogue::list_dressed))
         .route("/dress", post(handlers::dress::dress))
         .route("/validate", post(handlers::validate::validate))
         .route("/batch", post(handlers::batch::start))
@@ -57,73 +58,29 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .nest("/api/v1", api_v1)
-        .route("/", get(landing_page))
+        // FR-056: raw catalogue bytes for the browser 3D viewer.
+        .route("/assets/*path", get(handlers::assets::serve_asset))
         .route("/healthz", get(handlers::health::healthz))
         .route("/readyz", get(handlers::health::readyz))
         .merge(openapi::docs_router())
+        // FR-052: the SPA owns "/" and every other unmatched path. axum tries
+        // the explicit routes above first, so /api/v1, /assets, /docs,
+        // /openapi.json, /healthz, /readyz all still win.
+        .fallback(handlers::static_files::handler)
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
 
-/// Tiny landing page for `GET /`. The dresser is headless — no SPA, no
-/// static editor — but a bare-host visit otherwise shows nothing, which
-/// reads as "is it broken?". This page links to the actual surfaces.
-async fn landing_page() -> impl IntoResponse {
-    let html = r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>urdf-robo-dresser</title>
-  <style>
-    body { font: 14px -apple-system, system-ui, sans-serif; max-width: 42em;
-           margin: 4em auto; padding: 0 1em; color: #222; line-height: 1.5; }
-    h1 { font-size: 1.4em; margin-bottom: 0.2em; }
-    .sub { color: #666; margin-bottom: 2em; }
-    ul { padding-left: 1.2em; }
-    code { background: #f0f0f0; padding: 0.1em 0.35em; border-radius: 3px; }
-    a { color: #0451a5; }
-  </style>
-</head>
-<body>
-  <h1>urdf-robo-dresser</h1>
-  <p class="sub">Headless URDF merge service. There is no web UI — the
-  surfaces below are everything the server exposes.</p>
-
-  <h2>Browser-friendly</h2>
-  <ul>
-    <li><a href="/docs">/docs</a> — Swagger UI (interactive API explorer)</li>
-    <li><a href="/openapi.json">/openapi.json</a> — raw OpenAPI 3.x spec</li>
-    <li><a href="/healthz">/healthz</a> — liveness probe</li>
-    <li><a href="/readyz">/readyz</a> — readiness probe (catalogue scan)</li>
-  </ul>
-
-  <h2>REST surface (versioned)</h2>
-  <ul>
-    <li><code>GET  /api/v1/catalogue</code> — list robots + tools</li>
-    <li><code>GET  /api/v1/catalogue/robots</code></li>
-    <li><code>GET  /api/v1/catalogue/tools</code></li>
-    <li><code>POST /api/v1/dress</code> — merge robot + tool by catalogue id</li>
-    <li><code>POST /api/v1/validate</code> — validate a URDF by path</li>
-    <li><code>POST /api/v1/batch</code> — kick off a permutation merge job</li>
-    <li><code>GET  /api/v1/jobs/:id</code> — poll a batch job</li>
-    <li><code>GET  /api/v1/jobs/:id/artifact</code> — download the batch zip</li>
-  </ul>
-
-  <p>For the 2D scene-layout editor, see <code>robo-fitting-room serve</code>
-  (a separate service on a different port).</p>
-</body>
-</html>"#;
-    (
-        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        html,
-    )
-}
-
 /// Bind to `host:port` and run until the process is killed. Mirrors the
 /// fitting-room banner so users see the URL on stdout on first launch.
-pub async fn run(host: &str, port: u16, catalogue: PathBuf) -> Result<(), DresserError> {
+pub async fn run(
+    host: &str,
+    port: u16,
+    catalogue: PathBuf,
+    web_root: Option<PathBuf>,
+) -> Result<(), DresserError> {
     let canon = std::fs::canonicalize(&catalogue).map_err(DresserError::from)?;
-    let state = AppState::new(canon.clone());
+    let state = AppState::new(canon.clone()).with_web_root(web_root.clone());
     let app = router(state);
 
     let addr: SocketAddr = format!("{}:{}", host, port)
@@ -135,12 +92,18 @@ pub async fn run(host: &str, port: u16, catalogue: PathBuf) -> Result<(), Dresse
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(DresserError::from)?;
 
     let url_host = if host == "0.0.0.0" { "localhost" } else { host };
+    let spa_src = match web_root.as_ref() {
+        Some(dir) => format!("disk ({})", dir.display()),
+        None => "embedded".to_string(),
+    };
     eprintln!();
-    eprintln!("  urdf-robo-dresser  ▸  catalogue + REST API");
+    eprintln!("  urdf-robo-dresser  ▸  3D viewer + REST API");
     eprintln!("  ─────────────────────────────────────────────");
     eprintln!("  Listening on   http://{}", addr);
-    eprintln!("  Open in browser → http://{}:{}/docs", url_host, port);
+    eprintln!("  Open in browser → http://{}:{}/", url_host, port);
+    eprintln!("  API docs        http://{}:{}/docs", url_host, port);
     eprintln!("  Catalogue       {}", canon.display());
+    eprintln!("  SPA source      {}", spa_src);
     eprintln!("  Press Ctrl-C to stop.");
     eprintln!();
     log::info!("urdf-robo-dresser serve listening on http://{}", addr);
