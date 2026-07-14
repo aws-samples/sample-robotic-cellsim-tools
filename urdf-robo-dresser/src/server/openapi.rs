@@ -10,7 +10,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::server::dto::{
     AssetStatusDto, BatchAccepted, BatchRequest, CatalogueListing, DiagnosticDto,
-    DressRequest, DressResponse, ErrorEnvelope, HealthDto, JobStatus, ReadinessDto,
+    DressRequest, DressResponse, DressedEntry, ErrorEnvelope, HealthDto, JobStatus, ReadinessDto,
     RobotEntry, ToolEntry, ValidateRequest, ValidateResponse,
 };
 use crate::server::state::AppState;
@@ -30,6 +30,7 @@ use crate::server::state::AppState;
         crate::server::handlers::catalogue::list_all,
         crate::server::handlers::catalogue::list_robots,
         crate::server::handlers::catalogue::list_tools,
+        crate::server::handlers::catalogue::list_dressed,
         crate::server::handlers::dress::dress,
         crate::server::handlers::validate::validate,
         crate::server::handlers::batch::start,
@@ -42,6 +43,7 @@ use crate::server::state::AppState;
         CatalogueListing,
         RobotEntry,
         ToolEntry,
+        DressedEntry,
         AssetStatusDto,
         DressRequest,
         DressResponse,

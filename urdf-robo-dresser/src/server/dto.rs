@@ -34,6 +34,15 @@ pub struct ToolEntry {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+pub struct DressedEntry {
+    /// Combo directory name, i.e. `<robot_id>__<tool_id>`.
+    pub name: String,
+    /// Catalogue-relative path of the dressed URDF — feeds `/assets/<rel>`
+    /// and the browser viewer directly.
+    pub urdf_rel: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AssetStatusDto {
     Valid,

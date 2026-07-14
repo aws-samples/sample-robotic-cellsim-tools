@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>urdf-robo-dresser — dressing preview</title>
+    <link rel="stylesheet" href="/style.css" />
+    <!-- All 3D deps are vendored under /vendor (NFR-014) — no CDN at runtime.
+         The import map resolves the bare specifiers that three.js addons and
+         urdf-loader import. Must appear before any type="module" script. -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/three.module.js",
+          "three/addons/": "/vendor/three/addons/",
+          "three/examples/jsm/": "/vendor/three/addons/",
+          "urdf-loader": "/vendor/urdf-loader/URDFLoader.js",
+          "urdf-loader/": "/vendor/urdf-loader/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header>
+      <strong>urdf-robo-dresser</strong>
+      <span class="muted">dressing preview</span>
+      <span class="grow"></span>
+      <span id="status-line" class="muted">Ready.</span>
+    </header>
+
+    <main>
+      <aside id="palette">
+        <div class="aside-body">
+          <h3>Catalogue</h3>
+          <details open>
+            <summary>Robots</summary>
+            <ul id="palette-robots" class="palette-list"></ul>
+          </details>
+          <details open>
+            <summary>Tools</summary>
+            <ul id="palette-tools" class="palette-list"></ul>
+          </details>
+          <details open>
+            <summary>Dressed</summary>
+            <ul id="palette-dressed" class="palette-list"></ul>
+          </details>
+        </div>
+      </aside>
+
+      <section id="viewport-pane">
+        <canvas id="viewport"></canvas>
+        <div id="viewport-toolbar">
+          <label class="toggle" title="Show collision hulls">
+            <input type="checkbox" id="toggle-collision" />
+            <span>Collision hulls</span>
+          </label>
+        </div>
+        <div id="joint-hover" hidden></div>
+        <div id="viewport-overlay">
+          <span id="viewport-hint" class="muted">drag empty space = orbit · scroll = zoom · right-drag = pan · drag a joint = articulate it</span>
+        </div>
+      </section>
+
+      <aside id="inspector">
+        <div class="aside-body">
+          <h3>Inspector</h3>
+
+          <div class="form-group">
+            <h4>Selected pair</h4>
+            <div id="sel-robot" class="muted">Robot: —</div>
+            <div id="sel-tool" class="muted">Tool: —</div>
+          </div>
+
+          <div class="form-group">
+            <h4>Dress options</h4>
+            <div class="row">
+              <label>hull</label>
+              <select id="hull">
+                <option value="tight">tight</option>
+                <option value="medium" selected>medium</option>
+                <option value="max">max</option>
+              </select>
+            </div>
+            <fieldset id="orient-controls">
+              <legend>Tool orientation (90° steps)</legend>
+              <div class="orient-row" data-axis="0">
+                <span class="orient-label">X</span>
+                <button data-dir="-1">−90</button>
+                <span class="orient-val" data-axis="0">0°</span>
+                <button data-dir="1">+90</button>
+              </div>
+              <div class="orient-row" data-axis="1">
+                <span class="orient-label">Y</span>
+                <button data-dir="-1">−90</button>
+                <span class="orient-val" data-axis="1">0°</span>
+                <button data-dir="1">+90</button>
+              </div>
+              <div class="orient-row" data-axis="2">
+                <span class="orient-label">Z</span>
+                <button data-dir="-1">−90</button>
+                <span class="orient-val" data-axis="2">0°</span>
+                <button data-dir="1">+90</button>
+              </div>
+            </fieldset>
+            <div class="btn-row">
+              <button id="btn-dress">Dress</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <h4>Output</h4>
+            <div id="output-badge" hidden>✓ new URDF written</div>
+            <div id="output-path" class="muted path" title="">—</div>
+          </div>
+
+          <details open>
+            <summary title="URDF validation of the robot + tool from the last dress. Errors (red) block the dress; warnings (amber) are non-blocking.">Diagnostics</summary>
+            <div class="hint">URDF validation of the robot + tool. <span class="err-text">Errors</span> block the dress; <span class="warn-text">warnings</span> are advisory.</div>
+            <ul id="diagnostics" class="diag-list"></ul>
+          </details>
+
+          <details open>
+            <summary>Joints</summary>
+            <div id="joint-sliders" class="muted">Select or dress a robot to see its joints.</div>
+          </details>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

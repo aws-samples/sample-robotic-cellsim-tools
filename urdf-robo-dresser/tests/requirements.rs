@@ -681,28 +681,125 @@ fn fr_051_rest_api() {
     }
 }
 
-/// FR-052: Built-in web UI SPA
+/// The embedded SPA source tree. Web-only FRs assert against this directly,
+/// matching the fitting-room "point Status at web/js/*.js" idiom.
+fn web_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("web")
+}
+
+/// FR-052: Built-in web UI SPA. Wire-level coverage (GET / -> 200 HTML,
+/// vendored assets served) lives in `tests/server.rs`; this proves the SPA
+/// source is present and self-referential so the FR<->test map stays 1:1.
 #[test]
 fn fr_052_web_ui() {
-    todo!("Web UI not yet implemented");
+    let index = std::fs::read_to_string(web_dir().join("index.html"))
+        .expect("web/index.html must exist");
+    assert!(index.contains("js/app.js"), "index.html must load the app module");
+    assert!(web_dir().join("js/app.js").exists());
+    assert!(web_dir().join("js/api.js").exists());
 }
 
-/// FR-053: WebGL 3D URDF viewer
+/// FR-053: WebGL 3D URDF viewer with rotate/zoom/pan (OrbitControls).
 #[test]
 fn fr_053_webgl_viewer() {
-    todo!("WebGL viewer not yet implemented");
+    let v = std::fs::read_to_string(web_dir().join("js/viewer.js"))
+        .expect("web/js/viewer.js must exist");
+    assert!(v.contains("OrbitControls"), "viewer must wire rotate/zoom/pan");
+    assert!(v.contains("URDFLoader") || v.contains("loadUrdf"), "viewer must load a URDF");
+    assert!(v.contains("THREE"), "viewer must use the vendored three.js");
 }
 
-/// FR-054: Interactive 90° orientation controls in browser
+/// FR-054: 90-degree orient controls (PARTIAL — re-dress round-trip; BL-008).
 #[test]
 fn fr_054_orientation_controls() {
-    todo!("Browser orientation controls not yet implemented");
+    let c = std::fs::read_to_string(web_dir().join("js/controls.js"))
+        .expect("web/js/controls.js must exist");
+    assert!(c.contains("orient"), "controls must expose orient buttons");
+    // v1 applies orientation by re-dressing; the no-round-trip live preview is BL-008.
+    assert!(c.contains("onDress") || c.contains("dress"), "orient change must trigger a re-dress");
 }
 
-/// FR-055: Joint manipulation sliders in browser
+/// FR-055: per-joint sliders driving client-side FK on the dressed robot.
 #[test]
 fn fr_055_joint_sliders() {
-    todo!("Browser joint sliders not yet implemented");
+    let j = std::fs::read_to_string(web_dir().join("js/joints.js"))
+        .expect("web/js/joints.js must exist");
+    assert!(j.contains("\"range\"") || j.contains("'range'"), "must build per-joint range sliders");
+    assert!(j.contains("setJointValue"), "slider input must drive FK on downstream links");
+}
+
+/// FR-056: asset byte route. Real HTTP asserts live in `tests/server.rs`;
+/// this delegating stub keeps the 1:1 FR<->test map (mirrors fr_050/fr_051).
+#[test]
+fn fr_056_asset_serving() {
+    #[cfg(feature = "server")]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    {
+        todo!("Server feature not enabled — run `cargo test --features server --test server`");
+    }
+}
+
+/// FR-057: list already-dressed robots. Real HTTP asserts live in
+/// `tests/server.rs`; this delegating stub keeps the 1:1 FR<->test map.
+#[test]
+fn fr_057_dressed_listing() {
+    #[cfg(feature = "server")]
+    {
+        return;
+    }
+    #[allow(unreachable_code)]
+    {
+        todo!("Server feature not enabled — run `cargo test --features server --test server`");
+    }
+}
+
+/// FR-058: collision-hull toggle + joint-name display in the browser viewer.
+#[test]
+fn fr_058_collision_toggle_and_joint_names() {
+    let v = std::fs::read_to_string(web_dir().join("js/viewer.js"))
+        .expect("web/js/viewer.js must exist");
+    assert!(v.contains("parseCollision"), "viewer must parse collision geometry");
+    assert!(v.contains("setCollisionVisible"), "viewer must expose a collision toggle");
+    let j = std::fs::read_to_string(web_dir().join("js/joints.js"))
+        .expect("web/js/joints.js must exist");
+    // Joint names are rendered as the slider label text.
+    assert!(j.contains("label.textContent = name"), "joints panel must show joint names");
+}
+
+/// FR-059: corner XYZ axis gizmo + in-viewport joint dragging.
+#[test]
+fn fr_059_axis_gizmo_and_joint_drag() {
+    let v = std::fs::read_to_string(web_dir().join("js/viewer.js"))
+        .expect("web/js/viewer.js must exist");
+    assert!(v.contains("ViewHelper"), "viewer must show a corner axis gizmo");
+    assert!(v.contains("PointerURDFDragControls"), "viewer must wire in-viewport joint dragging");
+    assert!(v.contains("onJointChange"), "drag must emit joint changes to sync the sliders");
+    // The gizmo + drag controls must be vendored offline (NFR-014).
+    assert!(web_dir().join("vendor/three/addons/helpers/ViewHelper.js").exists());
+    assert!(web_dir().join("vendor/urdf-loader/URDFDragControls.js").exists());
+}
+
+/// NFR-014: 3D deps vendored under web/vendor/, no CDN at runtime. The
+/// index must carry no external `import`/`<script>`/`<link>`; the vendored
+/// three.js must be present. (HTTP-serving proof is in `tests/server.rs`.)
+#[test]
+fn nfr_014_vendored_deps() {
+    let index = std::fs::read_to_string(web_dir().join("index.html"))
+        .expect("web/index.html must exist");
+    // No CDN/network references in the shell that boots the SPA.
+    assert!(!index.contains("http://"), "index.html must not reference http:// resources");
+    assert!(!index.contains("https://"), "index.html must not reference https:// resources");
+    assert!(
+        web_dir().join("vendor/three/three.module.js").exists(),
+        "three.js must be vendored under web/vendor/"
+    );
+    assert!(
+        web_dir().join("vendor/urdf-loader/URDFLoader.js").exists(),
+        "urdf-loader must be vendored under web/vendor/"
+    );
 }
 
 /// NFR-002: Single dress operation under 10 seconds

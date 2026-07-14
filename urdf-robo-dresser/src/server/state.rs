@@ -12,6 +12,9 @@ use crate::error::DresserError;
 pub struct AppState {
     pub catalogue_root: Arc<PathBuf>,
     pub jobs: Arc<RwLock<JobRegistry>>,
+    /// `Some` => serve the SPA from this disk dir (live dev, `--web-root`);
+    /// `None` => serve the `include_dir!` bundle baked into the binary.
+    pub web_root: Option<Arc<PathBuf>>,
 }
 
 impl AppState {
@@ -19,7 +22,15 @@ impl AppState {
         Self {
             catalogue_root: Arc::new(catalogue_root),
             jobs: Arc::new(RwLock::new(JobRegistry::default())),
+            web_root: None,
         }
+    }
+
+    /// Override the embedded SPA bundle with files read from disk. Mirrors
+    /// the fitting-room's `--web-root` live-dev path.
+    pub fn with_web_root(mut self, web_root: Option<PathBuf>) -> Self {
+        self.web_root = web_root.map(Arc::new);
+        self
     }
 
     /// Resolve a user-supplied catalogue-relative path. Refuses absolute
@@ -82,5 +93,24 @@ impl JobRegistry {
         if let Some(slot) = self.jobs.get_mut(id) {
             *slot = state;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // FR-056: authoritative sandbox guard for the /assets byte route. This is
+    // the real boundary — HTTP clients often normalise `..` away before it
+    // reaches the wire, so the guard is tested at the function level.
+    #[test]
+    fn resolve_asset_rejects_traversal_and_absolute() {
+        let state = AppState::new(PathBuf::from("/catalogue"));
+        assert!(state.resolve_asset("../etc/passwd").is_err());
+        assert!(state.resolve_asset("a/../../b").is_err());
+        assert!(state.resolve_asset("/etc/passwd").is_err());
+        // A clean relative path resolves under the catalogue root.
+        let ok = state.resolve_asset("urdf-dressed-robots/x/x.urdf").unwrap();
+        assert!(ok.starts_with("/catalogue"));
     }
 }

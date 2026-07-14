@@ -263,24 +263,35 @@ Exit code 0 = valid, non-zero = errors found.
 
 ---
 
-### `serve` — REST API + Swagger UI
+### `serve` — 3D viewer SPA + REST API + Swagger UI
 
-Boot the same operations as a versioned HTTP service.
+Boot the same operations as a versioned HTTP service, with a built-in
+browser-based 3D URDF viewer at `/`.
 
 ```sh
 urdf-robo-dresser serve --catalogue assets
-# REST + Swagger UI on http://localhost:3030
+# 3D viewer + REST + Swagger UI on http://localhost:3030
 ```
+
+Open `http://localhost:3030/` in a browser: pick a robot and a tool from the
+catalogue, click **Dress**, and preview the dressed robot in WebGL — orbit /
+zoom / pan, step the tool orientation in 90° increments, and articulate the
+joints with per-joint sliders. All 3D dependencies (three.js, urdf-loader) are
+vendored and served locally — no CDN or network access at runtime.
 
 | Path | What |
 |------|------|
-| `/` | Landing page |
+| `/` | Built-in 3D viewer SPA |
+| `/assets/*path` | Raw catalogue URDF + mesh bytes for the viewer (path-sandboxed) |
 | `/docs` | Swagger UI |
 | `/openapi.json` | OpenAPI 3.x spec |
 | `/healthz`, `/readyz` | Liveness + readiness probes |
 | `/api/v1/catalogue` | List catalogue robots + tools |
 | `/api/v1/dress` | POST `{robot_id, tool_id}`, get a dressed URDF |
 | `/api/v1/batch` | Long-running permutation merge → `202` + job id |
+
+Pass `--web-root <dir>` to serve the SPA from disk instead of the embedded
+bundle (live-edit the viewer JS without rebuilding).
 
 ```sh
 curl -s http://localhost:3030/api/v1/catalogue | jq .

@@ -198,3 +198,147 @@ async fn openapi_spec_is_served_under_v1_only() {
         );
     }
 }
+
+// ---------- dressed listing (FR-057) ----------
+
+#[tokio::test]
+async fn dressed_listing_returns_seeded_combo() {
+    let (base, dir) = spawn_server().await;
+    // Empty to start.
+    let empty: Value = rq()
+        .get(format!("{}/api/v1/catalogue/dressed", base))
+        .send().await.unwrap()
+        .json().await.unwrap();
+    assert_eq!(empty.as_array().unwrap().len(), 0, "no dressed robots yet");
+
+    // Seed a dressed combo on disk (as POST /api/v1/dress would write it).
+    let combo = dir.path().join("urdf-dressed-robots/r1__t1");
+    std::fs::create_dir_all(&combo).unwrap();
+    std::fs::write(
+        combo.join("r1__t1.urdf"),
+        "<?xml version=\"1.0\"?>\n<robot name=\"r1__t1\"><link name=\"base\"/></robot>\n",
+    ).unwrap();
+
+    let v: Value = rq()
+        .get(format!("{}/api/v1/catalogue/dressed", base))
+        .send().await.unwrap()
+        .json().await.unwrap();
+    let arr = v.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "one dressed combo: {:?}", arr);
+    assert_eq!(arr[0]["name"], "r1__t1");
+    assert_eq!(arr[0]["urdf_rel"], "urdf-dressed-robots/r1__t1/r1__t1.urdf");
+}
+
+// ---------- SPA + static assets (FR-052, FR-056, NFR-014) ----------
+
+#[tokio::test]
+async fn root_serves_spa_html() {
+    // FR-052: `/` serves the embedded SPA, not the old landing page.
+    let (base, _dir) = spawn_server().await;
+    let resp = rq().get(format!("{}/", base)).send().await.unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let ct = resp.headers()[reqwest::header::CONTENT_TYPE]
+        .to_str().unwrap().to_string();
+    assert!(ct.starts_with("text/html"), "content-type: {}", ct);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("js/app.js"), "SPA index must load the app module");
+    assert!(!body.contains("There is no web UI"), "old landing page must be gone");
+}
+
+#[tokio::test]
+async fn spa_fallback_serves_index_for_unknown_route() {
+    // FR-052: the SPA fallback returns index.html for unknown deep paths.
+    let (base, _dir) = spawn_server().await;
+    let resp = rq()
+        .get(format!("{}/some/deep/spa/route", base))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert!(resp.text().await.unwrap().contains("js/app.js"));
+}
+
+#[tokio::test]
+async fn vendored_three_js_is_served() {
+    // NFR-014: 3D deps are vendored, not fetched from a CDN at runtime.
+    let (base, _dir) = spawn_server().await;
+    let resp = rq()
+        .get(format!("{}/vendor/three/three.module.js", base))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    assert!(resp.bytes().await.unwrap().len() > 0);
+}
+
+#[tokio::test]
+async fn assets_route_serves_seeded_urdf_bytes() {
+    // FR-056: browser can fetch catalogue URDF bytes for source preview.
+    let (base, _dir) = spawn_server().await;
+    let resp = rq()
+        .get(format!("{}/assets/urdf-robot-collection/r1/r1.urdf", base))
+        .send().await.unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("<robot"), "must return the URDF bytes");
+}
+
+#[tokio::test]
+async fn assets_route_serves_mesh_with_non_html_content_type() {
+    // FR-056: the relative-mesh serving contract the WebGL viewer relies on —
+    // urdf-loader resolves ./meshes/foo.obj against the URDF URL, which maps
+    // to /assets/.../meshes/foo.obj. Simulate a dressed combo tree on disk
+    // (as `POST /api/v1/dress` writes it) and fetch the URDF + a robot mesh.
+    let (base, dir) = spawn_server().await;
+    let combo = dir.path().join("urdf-dressed-robots/r1__t1");
+    std::fs::create_dir_all(combo.join("meshes/robot")).unwrap();
+    std::fs::create_dir_all(combo.join("meshes/tool")).unwrap();
+    std::fs::write(
+        combo.join("r1__t1.urdf"),
+        "<?xml version=\"1.0\"?>\n<robot name=\"r1__t1\">\n  <link name=\"base\">\n    <visual><geometry><mesh filename=\"meshes/robot/box.obj\"/></geometry></visual>\n  </link>\n</robot>\n",
+    ).unwrap();
+    std::fs::write(
+        combo.join("meshes/robot/box.obj"),
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+    ).unwrap();
+
+    // URDF bytes.
+    let urdf = rq()
+        .get(format!("{}/assets/urdf-dressed-robots/r1__t1/r1__t1.urdf", base))
+        .send().await.unwrap();
+    assert_eq!(urdf.status(), reqwest::StatusCode::OK);
+    assert!(urdf.text().await.unwrap().contains("meshes/robot/box.obj"));
+
+    // Referenced mesh — must be reachable and NOT served as HTML.
+    let mesh = rq()
+        .get(format!("{}/assets/urdf-dressed-robots/r1__t1/meshes/robot/box.obj", base))
+        .send().await.unwrap();
+    assert_eq!(mesh.status(), reqwest::StatusCode::OK);
+    let ct = mesh.headers()[reqwest::header::CONTENT_TYPE].to_str().unwrap().to_string();
+    assert!(!ct.starts_with("text/html"), "mesh content-type must not be HTML: {}", ct);
+    assert!(mesh.text().await.unwrap().starts_with("v "), "must return the OBJ bytes");
+}
+
+#[tokio::test]
+async fn assets_route_never_escapes_catalogue() {
+    // FR-056: the /assets route must never return a file outside the
+    // catalogue. HTTP clients normalise `..`/`%2e%2e` away before it reaches
+    // the wire (so a status-code assertion is unreliable) — the authoritative
+    // sandbox guard is unit-tested in `server::state::tests`. Here we assert
+    // the observable safety property end-to-end: seed a secret OUTSIDE the
+    // catalogue and confirm no traversal attempt ever leaks its contents.
+    let (base, dir) = spawn_server().await;
+    let secret = dir.path().parent().unwrap().join("dresser_secret.txt");
+    std::fs::write(&secret, "TOP-SECRET-DO-NOT-LEAK").unwrap();
+
+    for attempt in [
+        "/assets/../dresser_secret.txt",
+        "/assets/%2e%2e/dresser_secret.txt",
+        "/assets/..%2fdresser_secret.txt",
+    ] {
+        let resp = rq().get(format!("{}{}", base, attempt)).send().await.unwrap();
+        let body = resp.text().await.unwrap();
+        assert!(
+            !body.contains("TOP-SECRET"),
+            "traversal `{}` leaked an out-of-catalogue file",
+            attempt
+        );
+    }
+    let _ = std::fs::remove_file(&secret);
+}
