@@ -5,6 +5,50 @@
 const ROBOT_RADIUS_M = 0.4;        // base footprint radius in metres
 const FIXTURE_HALF_M = 0.5;        // default fixture half-extent
 
+/**
+ * Read a `--vscode-*` theme custom property injected by the IDE (VS Code /
+ * Kiro set these on the webview's root element automatically), falling back
+ * to `fallback` when the property is unset (e.g. running outside a themed
+ * webview). Canvas 2D drawing calls (fillStyle/strokeStyle) need concrete
+ * color strings, not CSS var() references, so palette colors are resolved
+ * once here rather than inlined as var(...) throughout the drawing code.
+ */
+function themeColor(varName, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return v || fallback;
+}
+
+/** Canvas drawing palette, resolved from the IDE's current theme. Recomputed
+ *  on construction and whenever VS Code signals a theme change, so switching
+ *  between e.g. Kiro's light/dark themes updates the render without reload. */
+function buildPalette() {
+  return {
+    // --vscode-panel-border is meant for dividers between adjacent panels
+    // (e.g. the palette/inspector borders) and in many themes is near-
+    // invisible against a flat background of the same panel — which is
+    // exactly why the grid disappeared. --vscode-editorWhitespace-foreground
+    // is themes' dedicated token for faint guide/whitespace overlays drawn
+    // directly on the editor background, so it stays visible while still
+    // reading as a subtle grid.
+    gridLine: themeColor("--vscode-editorWhitespace-foreground", "#2a2e32"),
+    floorLine: themeColor("--vscode-descriptionForeground", "#5a6268"),
+    footprintLine: themeColor("--vscode-focusBorder", "#ff8a3d"),
+    originRing: themeColor("--vscode-focusBorder", "#ff8a3d"),
+    axisX: themeColor("--vscode-charts-red", "#e04444"),
+    axisY: themeColor("--vscode-charts-green", "#3fb443"),
+    axisOrigin: themeColor("--vscode-editor-foreground", "#ffffff"),
+    robotFill: themeColor("--vscode-charts-blue", "#5e8db8"),
+    robotStroke: themeColor("--vscode-charts-blue", "#90b4d6"),
+    robotFillSelected: themeColor("--vscode-list-activeSelectionBackground", "#ffa566"),
+    robotStrokeSelected: themeColor("--vscode-focusBorder", "#ffd9b3"),
+    fixtureFill: themeColor("--vscode-charts-green", "#6f7d56"),
+    fixtureStroke: themeColor("--vscode-charts-green", "#8c9c70"),
+    fixtureFillSelected: themeColor("--vscode-list-activeSelectionBackground", "#a5b88a"),
+    fixtureStrokeSelected: themeColor("--vscode-focusBorder", "#cfdbb1"),
+    label: themeColor("--vscode-editor-foreground", "#ffffff"),
+  };
+}
+
 export class CanvasView {
   constructor(canvas, getState, onSelect) {
     this.canvas = canvas;
@@ -25,10 +69,30 @@ export class CanvasView {
     this.hovered = null;
     this.dragging = null;     // {type, index, start: {x, y}}
     this.panning = null;      // {start_screen, start_center}
+    this.palette = buildPalette();
+    // VS Code (and Kiro) toggle a `vscode-high-contrast`/theme-kind class and
+    // re-inject the --vscode-* custom properties on `<body>` when the user
+    // switches themes; re-resolve our cached colors so the canvas follows
+    // along without needing a reload.
+    new MutationObserver(() => {
+      this.palette = buildPalette();
+      this.render();
+    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
     this._installEvents();
     this._fitDpr();
-    window.addEventListener("resize", () => this._fitDpr());
+    // A window 'resize' listener alone misses most of the ways this canvas's
+    // container can change size in a VS Code webview: the initial CSS grid
+    // layout settling a tick after mount (leaving the constructor's first
+    // _fitDpr() call with a stale, too-small rect), the palette/inspector
+    // aside collapse/expand transition (a grid-template-columns change, not a
+    // window resize), and editor-group/panel resizes. ResizeObserver fires
+    // reliably for all of these — including once immediately with the correct
+    // post-layout size — so the canvas always tracks its actual available
+    // space instead of getting stuck at whatever size it happened to measure
+    // first.
+    this._resizeObserver = new ResizeObserver(() => this._fitDpr());
+    this._resizeObserver.observe(this.canvas.parentElement || this.canvas);
   }
 
   setFloor(segments, cellOriginDxf, floorOffset, floorScale) {
@@ -109,7 +173,7 @@ export class CanvasView {
     this._drawGrid(w, h);
 
     // Floor plan
-    ctx.strokeStyle = "#5a6268";
+    ctx.strokeStyle = this.palette.floorLine;
     ctx.lineWidth = 1;
     for (const seg of this.floorSegments.segments || []) {
       const ax = seg[0][0] * this.floorScale + this.floorOffset[0];
@@ -122,7 +186,7 @@ export class CanvasView {
       ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
       ctx.stroke();
     }
-    ctx.strokeStyle = "#ff8a3d";
+    ctx.strokeStyle = this.palette.footprintLine;
     ctx.lineWidth = 1.2;
     for (const seg of this.floorSegments.footprint_segments || []) {
       const ax = seg[0][0] * this.floorScale + this.floorOffset[0];
@@ -142,7 +206,7 @@ export class CanvasView {
     // Cell origin marker
     if (this.cellOriginDxf) {
       const p = this.worldToScreen(0, 0);
-      ctx.strokeStyle = "#ff8a3d";
+      ctx.strokeStyle = this.palette.originRing;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
@@ -166,21 +230,21 @@ export class CanvasView {
     const yEnd = this.worldToScreen(0, 1);
     ctx.lineWidth = 2;
     // X
-    ctx.strokeStyle = "#e04444";
+    ctx.strokeStyle = this.palette.axisX;
     ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(xEnd.x, xEnd.y); ctx.stroke();
-    this._drawArrowhead(xEnd, o, "#e04444");
-    ctx.fillStyle = "#e04444";
+    this._drawArrowhead(xEnd, o, this.palette.axisX);
+    ctx.fillStyle = this.palette.axisX;
     ctx.font = "11px JetBrains Mono, monospace";
     ctx.textAlign = "left";
     ctx.fillText("X", xEnd.x + 4, xEnd.y + 4);
     // Y
-    ctx.strokeStyle = "#3fb443";
+    ctx.strokeStyle = this.palette.axisY;
     ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(yEnd.x, yEnd.y); ctx.stroke();
-    this._drawArrowhead(yEnd, o, "#3fb443");
-    ctx.fillStyle = "#3fb443";
+    this._drawArrowhead(yEnd, o, this.palette.axisY);
+    ctx.fillStyle = this.palette.axisY;
     ctx.fillText("Y", yEnd.x + 4, yEnd.y - 2);
     // origin ring
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = this.palette.axisOrigin;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(o.x, o.y, 4, 0, Math.PI * 2);
@@ -217,7 +281,7 @@ export class CanvasView {
     const x1 = Math.ceil(br.x / stepM) * stepM;
     const y0 = Math.floor(br.y / stepM) * stepM;
     const y1 = Math.ceil(tl.y / stepM) * stepM;
-    ctx.strokeStyle = "#2a2e32";
+    ctx.strokeStyle = this.palette.gridLine;
     ctx.lineWidth = 1;
     for (let x = x0; x <= x1; x += stepM) {
       const sx = this.worldToScreen(x, 0).x;
@@ -234,8 +298,8 @@ export class CanvasView {
     const ctx = this.ctx;
     const c = this.worldToScreen(r.position.x, r.position.y);
     const r_px = ROBOT_RADIUS_M * this.view.scale;
-    ctx.fillStyle = selected ? "#ffa566" : "#5e8db8";
-    ctx.strokeStyle = selected ? "#ffd9b3" : "#90b4d6";
+    ctx.fillStyle = selected ? this.palette.robotFillSelected : this.palette.robotFill;
+    ctx.strokeStyle = selected ? this.palette.robotStrokeSelected : this.palette.robotStroke;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(c.x, c.y, r_px, 0, Math.PI * 2);
@@ -250,7 +314,7 @@ export class CanvasView {
     ctx.moveTo(c.x, c.y); ctx.lineTo(tipX, tipY);
     ctx.stroke();
 
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = this.palette.label;
     ctx.font = "11px JetBrains Mono, monospace";
     ctx.textAlign = "center";
     ctx.fillText(r.robot_id, c.x, c.y - r_px - 4);
@@ -264,13 +328,13 @@ export class CanvasView {
     ctx.translate(c.x, c.y);
     const yawDeg = f.orientation.a || 0;
     ctx.rotate((-yawDeg * Math.PI) / 180);
-    ctx.fillStyle = selected ? "#a5b88a" : "#6f7d56";
-    ctx.strokeStyle = selected ? "#cfdbb1" : "#8c9c70";
+    ctx.fillStyle = selected ? this.palette.fixtureFillSelected : this.palette.fixtureFill;
+    ctx.strokeStyle = selected ? this.palette.fixtureStrokeSelected : this.palette.fixtureStroke;
     ctx.lineWidth = 1.2;
     ctx.fillRect(-half_px, -half_px, 2 * half_px, 2 * half_px);
     ctx.strokeRect(-half_px, -half_px, 2 * half_px, 2 * half_px);
     ctx.restore();
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = this.palette.label;
     ctx.font = "11px JetBrains Mono, monospace";
     ctx.textAlign = "center";
     ctx.fillText(f.id, c.x, c.y - half_px - 4);
@@ -367,7 +431,15 @@ export class CanvasView {
 
   _fitDpr() {
     const dpr = window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
+    // Measure the CONTAINER, not the canvas itself: _fitDpr sets the canvas's
+    // inline style.width/height to a fixed px value below, so if we measured
+    // canvas.getBoundingClientRect() we'd just read back whatever we last set
+    // it to — a self-reference that can never detect the container actually
+    // growing (e.g. the window/panel resizing, an aside collapsing). The
+    // container's box is driven by the real CSS grid layout, so it always
+    // reflects the true available space.
+    const container = this.canvas.parentElement || this.canvas;
+    const rect = container.getBoundingClientRect();
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
     this.canvas.style.width = rect.width + "px";

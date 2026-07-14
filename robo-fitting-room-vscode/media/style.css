@@ -1,12 +1,19 @@
 :root {
-  --bg: #1a1c1e;
-  --bg-pane: #232629;
-  --bg-elev: #2c3034;
-  --fg: #d0d4d8;
-  --fg-muted: #7a818a;
-  --accent: #ff8a3d;
-  --line: #3a3f44;
-  --selected: #ffa566;
+  /* Sourced from the IDE's own theme (VS Code / Kiro inject --vscode-* custom
+   * properties into every webview automatically — no extra wiring needed).
+   * Each has a hardcoded fallback so the UI still renders sensibly if a given
+   * token is ever missing from a theme (see microsoft/vscode-docs
+   * api/references/theme-color.md and the --vscode-<id> naming convention,
+   * where dots in the theme color id become dashes). */
+  --bg: var(--vscode-editor-background, #1a1c1e);
+  --bg-pane: var(--vscode-sideBar-background, #232629);
+  --bg-elev: var(--vscode-input-background, #2c3034);
+  --fg: var(--vscode-foreground, #d0d4d8);
+  --fg-muted: var(--vscode-descriptionForeground, #7a818a);
+  --accent: var(--vscode-focusBorder, #ff8a3d);
+  --line: var(--vscode-panel-border, #3a3f44);
+  --selected: var(--vscode-list-activeSelectionBackground, #ffa566);
+  --selected-fg: var(--vscode-list-activeSelectionForeground, #ffd9b3);
 }
 
 * { box-sizing: border-box; }
@@ -14,8 +21,8 @@
 html, body {
   margin: 0; padding: 0; height: 100%; width: 100%;
   background: var(--bg); color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 13px;
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
 }
 
 body { display: flex; flex-direction: column; }
@@ -30,11 +37,12 @@ header .grow { flex: 1; }
 header strong { font-size: 14px; }
 header .muted { color: var(--fg-muted); }
 header button {
-  background: var(--bg-elev); color: var(--fg);
+  background: var(--vscode-button-secondaryBackground, var(--bg-elev));
+  color: var(--vscode-button-secondaryForeground, var(--fg));
   border: 1px solid var(--line); border-radius: 3px;
   padding: 5px 10px; cursor: pointer;
 }
-header button:hover { background: var(--line); }
+header button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--line)); }
 
 main {
   display: grid;
@@ -109,10 +117,10 @@ details summary {
 .palette-list { list-style: none; margin: 0; padding: 0; }
 .palette-list li {
   padding: 5px 8px; border-radius: 3px; cursor: grab;
-  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--vscode-editor-font-family, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace);
   font-size: 11px;
 }
-.palette-list li:hover { background: var(--bg-elev); }
+.palette-list li:hover { background: var(--vscode-list-hoverBackground, var(--bg-elev)); }
 
 #canvas-pane { position: relative; overflow: hidden; }
 #canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
@@ -123,6 +131,12 @@ details summary {
   background: rgba(0, 0, 0, 0.4); color: var(--fg-muted);
   font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   font-size: 11px; pointer-events: none;
+  /* Fixed single-line height regardless of message length — long status text
+   * (e.g. the initial "Ready. Load a scene YAML, or click an asset..." hint)
+   * would otherwise wrap and stretch this bar tall on first load, only to
+   * shrink back down once a shorter "Added robot ..." message replaced it. */
+  height: 28px; box-sizing: border-box;
+  white-space: nowrap; overflow: hidden;
 }
 
 /* Inspector form */
@@ -145,22 +159,24 @@ details summary {
   font-size: 11px; color: var(--fg-muted);
 }
 #inspector input[type="number"], #inspector input[type="text"] {
-  background: var(--bg-elev); color: var(--fg);
-  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--vscode-input-background, var(--bg-elev));
+  color: var(--vscode-input-foreground, var(--fg));
+  border: 1px solid var(--vscode-input-border, var(--line)); border-radius: 3px;
   padding: 4px 6px; width: 100%; font-family: inherit; font-size: 12px;
 }
 #inspector input[type="number"]:focus,
 #inspector input[type="text"]:focus {
-  outline: none; border-color: var(--accent);
+  outline: none; border-color: var(--vscode-focusBorder, var(--accent));
 }
 #inspector .btn-row { display: flex; gap: 6px; margin-top: 6px; }
 #inspector .btn-row button {
-  background: var(--bg-elev); color: var(--fg);
+  background: var(--vscode-button-secondaryBackground, var(--bg-elev));
+  color: var(--vscode-button-secondaryForeground, var(--fg));
   border: 1px solid var(--line); border-radius: 3px;
   padding: 4px 8px; cursor: pointer; font-size: 11px;
 }
-#inspector .btn-row button:hover { background: var(--line); }
-#inspector .btn-danger { color: #ff6b6b; }
+#inspector .btn-row button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--line)); }
+#inspector .btn-danger { color: var(--vscode-errorForeground, #ff6b6b); }
 
 .muted { color: var(--fg-muted); }
 
@@ -170,10 +186,15 @@ details summary {
   align-items: center;
 }
 #coord-readout {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--vscode-editor-font-family, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace);
   font-size: 11px;
-  color: var(--accent);
+  color: var(--vscode-textLink-foreground, var(--accent));
   min-width: 240px;
+  flex-shrink: 0;
+}
+#status-line {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; /* allow this flex item to shrink below its content width */
 }
 
 /* ----- Modal ----- */
@@ -221,11 +242,12 @@ details summary {
   font-size: 11px; color: var(--fg-muted);
 }
 .modal-panel input[type="text"] {
-  background: var(--bg-elev); color: var(--fg);
-  border: 1px solid var(--line); border-radius: 3px;
+  background: var(--vscode-input-background, var(--bg-elev));
+  color: var(--vscode-input-foreground, var(--fg));
+  border: 1px solid var(--vscode-input-border, var(--line)); border-radius: 3px;
   padding: 5px 7px; width: 100%; font-family: inherit; font-size: 12px;
 }
-.modal-panel input[type="text"]:focus { outline: none; border-color: var(--accent); }
+.modal-panel input[type="text"]:focus { outline: none; border-color: var(--vscode-focusBorder, var(--accent)); }
 .modal-panel .row-check {
   display: flex; align-items: center; gap: 8px;
   cursor: pointer;
@@ -235,16 +257,19 @@ details summary {
   display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;
 }
 .modal-panel .btn-row button {
-  background: var(--bg-elev); color: var(--fg);
+  background: var(--vscode-button-secondaryBackground, var(--bg-elev));
+  color: var(--vscode-button-secondaryForeground, var(--fg));
   border: 1px solid var(--line); border-radius: 3px;
   padding: 6px 14px; cursor: pointer; font-size: 12px;
 }
-.modal-panel .btn-row button:hover { background: var(--line); }
+.modal-panel .btn-row button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--line)); }
 .modal-panel #btn-compose-go {
-  background: var(--accent); border-color: var(--accent); color: #1a1c1e;
+  background: var(--vscode-button-background, var(--accent));
+  border-color: var(--vscode-button-background, var(--accent));
+  color: var(--vscode-button-foreground, #1a1c1e);
   font-weight: 500;
 }
-.modal-panel #btn-compose-go:hover { filter: brightness(1.1); }
+.modal-panel #btn-compose-go:hover { background: var(--vscode-button-hoverBackground, var(--accent)); filter: brightness(1.1); }
 .modal-panel code {
   background: var(--bg-elev);
   padding: 1px 5px; border-radius: 3px;
