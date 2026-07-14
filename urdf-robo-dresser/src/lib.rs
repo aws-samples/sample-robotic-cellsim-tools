@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod error;
+pub mod reach;
 pub mod types;
 pub mod parser;
 pub mod serializer;
@@ -15,6 +16,7 @@ pub mod server;
 
 pub use error::{DresserError, Diagnostic, Severity};
 pub use types::{UrdfRobot, Link, Joint, Origin, Visual, Collision, Geometry, JointType, JointLimit, Inertial, InertiaMatrix, MergeOptions};
+pub use reach::ReachEnvelope;
 pub use parser::{parse_urdf, parse_urdf_bytes};
 pub use serializer::serialize_urdf;
 pub use validator::validate;

@@ -13,6 +13,18 @@ fn write_urdf(robot: &UrdfRobot, buf: &mut Vec<u8>) -> std::io::Result<()> {
     writeln!(buf, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>")?;
     writeln!(buf, "<robot name=\"{}\">", xml_escape(&robot.name))?;
 
+    // FR-028: reach-envelope annotation (custom extension element, safe for all
+    // downstream URDF consumers — same pattern as <gazebo>, <ros2_control>).
+    if let Some(ref r) = robot.reach {
+        writeln!(
+            buf,
+            "  <reach_envelope max_radius_2d=\"{}\" volume_3d=\"{}\" hull_mesh=\"{}\"/>",
+            fmt_f64(r.max_radius_2d),
+            fmt_f64(r.volume_3d),
+            xml_escape(&r.hull_obj_rel),
+        )?;
+    }
+
     for link in &robot.links {
         write_link(link, buf)?;
     }

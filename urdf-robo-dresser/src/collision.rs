@@ -108,7 +108,7 @@ pub fn generate_hulls(
     Ok(())
 }
 
-fn write_obj(
+pub(crate) fn write_obj(
     path: &Path,
     vertices: &[Point<f32>],
     triangles: &[[u32; 3]],

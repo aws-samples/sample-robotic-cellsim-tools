@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 
+use crate::reach::ReachEnvelope;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct UrdfRobot {
     pub name: String,
     pub links: Vec<Link>,
     pub joints: Vec<Joint>,
+    pub reach: Option<ReachEnvelope>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

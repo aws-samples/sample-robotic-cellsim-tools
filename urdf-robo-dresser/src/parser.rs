@@ -24,6 +24,7 @@ pub fn parse_urdf_bytes(bytes: &[u8], source: &str) -> Result<UrdfRobot, Dresser
     let mut robot_name = String::new();
     let mut links: Vec<Link> = Vec::new();
     let mut joints: Vec<Joint> = Vec::new();
+    let mut reach: Option<crate::reach::ReachEnvelope> = None;
 
     let mut state = ParseState::Root;
 
@@ -73,6 +74,13 @@ pub fn parse_urdf_bytes(bytes: &[u8], source: &str) -> Result<UrdfRobot, Dresser
                             inertial: None,
                             visuals: Vec::new(),
                             collisions: Vec::new(),
+                        });
+                    }
+                    ("reach_envelope", ParseState::Root | ParseState::InRobot) => {
+                        reach = Some(crate::reach::ReachEnvelope {
+                            max_radius_2d: get_attr_f64(e, b"max_radius_2d").unwrap_or(0.0),
+                            volume_3d: get_attr_f64(e, b"volume_3d").unwrap_or(0.0),
+                            hull_obj_rel: get_attr_str(e, b"hull_mesh").unwrap_or_default(),
                         });
                     }
                     _ => {
@@ -126,6 +134,7 @@ pub fn parse_urdf_bytes(bytes: &[u8], source: &str) -> Result<UrdfRobot, Dresser
         name: robot_name,
         links,
         joints,
+        reach,
     })
 }
 

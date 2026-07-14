@@ -78,11 +78,50 @@ pub fn merge(
     let tool_name = derive_tool_name(tool);
     let name = format!("{}__{}", base_name, tool_name);
 
+    // FR-028: compute reachable workspace (max 2D reach + 3D hull OBJ).
+    // tool_distal_offset = flange_face_offset + tool's furthest mesh extent.
+    let tool_extent = compute_tool_max_extent(tool, &opts.tool_urdf_dir);
+    let tool_distal_offset = flange_face_offset + tool_extent;
+    let dressed_for_reach = UrdfRobot {
+        name: name.clone(),
+        links: links.clone(),
+        joints: joints.clone(),
+        reach: None,
+    };
+    let reach = Some(crate::reach::compute_reach_envelope(
+        &dressed_for_reach,
+        tool_distal_offset,
+        &opts.output_dir,
+    ));
+
     Ok(UrdfRobot {
         name,
         links,
         joints,
+        reach,
     })
+}
+
+/// Max extent of the tool's mesh vertices from (0,0,0) in any direction.
+fn compute_tool_max_extent(tool: &UrdfRobot, tool_urdf_dir: &std::path::Path) -> f64 {
+    let mut max_dist = 0.0f64;
+    for link in &tool.links {
+        for vis in &link.visuals {
+            if let crate::types::Geometry::Mesh { ref filename, .. } = vis.geometry {
+                let path = tool_urdf_dir.join(filename.trim_start_matches("./"));
+                if let Ok(verts) = crate::mesh_reader::read_mesh_vertices(&path) {
+                    let transformed = crate::merger::apply_origin_to_vertices(&verts, &vis.origin);
+                    for v in &transformed {
+                        let d = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+                        if d > max_dist {
+                            max_dist = d;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    max_dist
 }
 
 // --- Flange Detection ---
@@ -482,7 +521,7 @@ fn compute_robot_aabb(base: &UrdfRobot, robot_urdf_dir: &Path) -> ([f64; 3], [f6
 }
 
 /// Apply an Origin transform (xyz translation + rpy rotation) to vertices.
-fn apply_origin_to_vertices(vertices: &[[f64; 3]], origin: &Origin) -> Vec<[f64; 3]> {
+pub(crate) fn apply_origin_to_vertices(vertices: &[[f64; 3]], origin: &Origin) -> Vec<[f64; 3]> {
     if origin.rpy == [0.0, 0.0, 0.0] && origin.xyz == [0.0, 0.0, 0.0] {
         return vertices.to_vec();
     }

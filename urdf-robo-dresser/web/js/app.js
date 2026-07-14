@@ -115,6 +115,7 @@ async function viewDressed(entry, li) {
   try {
     const robot = await viewer.loadUrdf(api.assetUrl(entry.urdf_rel));
     showJoints(robot);
+    state.dressedRel = entry.urdf_rel;
     setOutputPath(entry.urdf_rel);
     setStatus(`Viewing dressed ${entry.name}. Drag to rotate.`);
   } catch (e) {
@@ -241,6 +242,18 @@ setOutputPath(null);
 // FR-058: collision-hull overlay toggle.
 document.getElementById("toggle-collision").addEventListener("change", (e) => {
   viewer.setCollisionVisible(e.target.checked);
+});
+
+// FR-028: reach-envelope hull overlay toggle.
+document.getElementById("toggle-reach").addEventListener("change", (e) => {
+  // Derive the reach hull URL from the dressed URDF's combo path. The OBJ is
+  // always at meshes/3dreach/reach_envelope.obj relative to the combo dir.
+  let url = null;
+  if (state.dressedRel) {
+    const comboDir = state.dressedRel.replace(/\/[^/]+\.urdf$/, "");
+    url = api.assetUrl(comboDir + "/meshes/3dreach/reach_envelope.obj");
+  }
+  viewer.setReachVisible(e.target.checked, url);
 });
 
 refreshPalette();

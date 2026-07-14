@@ -244,6 +244,7 @@ mod tests {
                 axis: [0.0, 0.0, 1.0],
                 limit: None,
             }],
+            reach: None,
         }
     }
 

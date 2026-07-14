@@ -15,6 +15,43 @@ import { PointerURDFDragControls } from "urdf-loader/URDFDragControls.js";
 const ROBOT_COLOR = 0xb8bfc6; // neutral grey
 const TOOL_COLOR = 0xff8a3d;  // accent orange — distinguishes tool geometry
 const HULL_COLOR = 0x5fd07a;  // green — collision hull overlay
+/** Fresnel edge-glow shader for the reach envelope — transparent when viewed
+ *  head-on, glowing blue/cyan at grazing angles (like a holographic boundary). */
+function createReachMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      glowColor: { value: new THREE.Color(0x00ccff) },
+      edgeColor: { value: new THREE.Color(0x4488ff) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vNormal = normalize(normalMatrix * normal);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 glowColor;
+      uniform vec3 edgeColor;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        float fresnel = 1.0 - abs(dot(vNormal, vViewDir));
+        fresnel = pow(fresnel, 2.5);
+        vec3 color = mix(edgeColor, glowColor, fresnel);
+        float alpha = fresnel * 0.7 + 0.04; // near-invisible center, bright edges
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+  });
+}
+
 // A dressed robot can reference thousands of meshes (per-triangle collision
 // hulls). Firing them all as concurrent fetches exhausts the browser's
 // socket/memory pool (ERR_INSUFFICIENT_RESOURCES), so mesh loads run through
@@ -66,6 +103,8 @@ export class Viewer {
     this._collisionUrl = null;    // URDF url, for lazy collision loading
     this._collisionGroup = null;  // separate parseCollision=true robot overlay
     this._collisionLoaded = false;
+    this._reachGroup = null;      // reach-envelope hull overlay (FR-028)
+    this.showReach = false;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1c1e);
@@ -195,9 +234,11 @@ export class Viewer {
     };
     dispose(this.robot);
     if (this._collisionGroup) dispose(this._collisionGroup);
+    if (this._reachGroup) dispose(this._reachGroup);
     this.robot = null;
     this._collisionGroup = null;
     this._collisionLoaded = false;
+    this._reachGroup = null;
   }
 
   /**
@@ -334,5 +375,30 @@ export class Viewer {
     if (this.robot) this.robot.setJointValue(name, value);
     // Keep the collision overlay (if loaded) posed with the visual robot.
     if (this._collisionGroup) this._collisionGroup.setJointValue(name, value);
+  }
+
+  /**
+   * FR-028: toggle the reach-envelope hull overlay. Lazy-loaded on first enable
+   * from the given OBJ URL, rendered as a translucent blue shell. The envelope
+   * represents the full workspace and doesn't change with joint articulation.
+   */
+  setReachVisible(visible, hullUrl) {
+    this.showReach = visible;
+    if (visible && !this._reachGroup && hullUrl) {
+      this._loadQueue.push((done) => {
+        new OBJLoader(new THREE.LoadingManager()).load(hullUrl, (obj) => {
+          const mat = createReachMaterial();
+          obj.traverse((n) => {
+            if (n.isMesh) n.material = mat;
+          });
+          obj.visible = this.showReach;
+          this._reachGroup = obj;
+          this.world.add(obj);
+          done();
+        }, undefined, () => done());
+      });
+      return;
+    }
+    if (this._reachGroup) this._reachGroup.visible = visible;
   }
 }
