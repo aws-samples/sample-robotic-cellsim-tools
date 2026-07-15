@@ -1,0 +1,12 @@
+.vscode/**
+.gitignore
+src/**
+test/**
+tsconfig.json
+node_modules/**
+build-vsix.sh
+scripts/**
+**/*.map
+# Test-only assets — keep them out of the shipped .vsix.
+**/*.test.ts
+vitest.config.js

@@ -1,0 +1,6 @@
+node_modules/
+out/
+*.vsix
+.vscode-test/
+# Native binary bundled into the .vsix by build-vsix.sh (build artifact).
+bin/

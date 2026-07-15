@@ -1,0 +1,90 @@
+{
+  "name": "urdf-robo-dresser-vscode",
+  "displayName": "robo-dresser",
+  "description": "Browser-based 3D URDF dressing viewer for industrial robots and tools, hosted inside VS Code and backed by the urdf-robo-dresser REST server.",
+  "version": "0.1.0",
+  "publisher": "robotic-cellsim-tools",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aws-samples/sample-robotic-cellsim-tools.git",
+    "directory": "urdf-robo-dresser-vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "robotics",
+    "urdf",
+    "dressing",
+    "viewer",
+    "simulation"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "roboDresser.openViewer",
+        "title": "Robo Dresser: Open 3D Dressing Viewer"
+      },
+      {
+        "command": "roboDresser.startServer",
+        "title": "Robo Dresser: Start Server"
+      },
+      {
+        "command": "roboDresser.stopServer",
+        "title": "Robo Dresser: Stop Server"
+      },
+      {
+        "command": "roboDresser.openDocs",
+        "title": "Robo Dresser: Open API Docs in Browser"
+      }
+    ],
+    "configuration": {
+      "title": "Robo Dresser",
+      "properties": {
+        "roboDresser.catalogue": {
+          "type": "string",
+          "default": "",
+          "description": "Catalogue directory (containing urdf-robot-collection/ and urdf-tool-collection/) passed to `serve --catalogue`. Leave empty to be prompted."
+        },
+        "roboDresser.port": {
+          "type": "number",
+          "default": 3030,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "TCP port `serve --port` binds to."
+        },
+        "roboDresser.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the urdf-robo-dresser binary. Leave empty to use the binary bundled inside this (architecture-specific) extension."
+        },
+        "roboDresser.webRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional `serve --web-root` for live SPA editing instead of the embedded bundle. Usually left empty."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "./build-vsix.sh",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "fast-check": "^3.23.2",
+    "typescript": "^5.4.0",
+    "vitest": "^2.1.9"
+  }
+}
