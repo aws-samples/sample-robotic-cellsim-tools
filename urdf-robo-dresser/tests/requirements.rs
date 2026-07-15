@@ -707,6 +707,7 @@ fn fr_053_webgl_viewer() {
     assert!(v.contains("OrbitControls"), "viewer must wire rotate/zoom/pan");
     assert!(v.contains("URDFLoader") || v.contains("loadUrdf"), "viewer must load a URDF");
     assert!(v.contains("THREE"), "viewer must use the vendored three.js");
+    assert!(v.contains("MTLLoader"), "viewer must load .mtl material files (BL-013)");
 }
 
 /// FR-054: 90-degree orient controls (PARTIAL — re-dress round-trip; BL-008).

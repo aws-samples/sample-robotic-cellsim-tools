@@ -155,5 +155,5 @@ Items not yet prioritized for implementation:
 | <span id="bl-010">BL-010</span> | Stable tie-breaking in auto-orient for determinism | [NFR-003](#3-non-functional-requirements) |
 | <span id="bl-011">BL-011</span> | CI matrix for Linux/macOS/Windows | [NFR-004](#3-non-functional-requirements) |
 | <span id="bl-012">BL-012</span> | Stress test with 500-link URDF | [NFR-008](#3-non-functional-requirements) |
-| <span id="bl-013">BL-013</span> | Viewer reads OBJ/MTL material colors (Kd) so dressed robots render with correct colors in the browser 3D view (browser-side counterpart to the URDF-injection path in [BL-005](#bl-005)) | [FR-053](#26-server-mode) |
+| ~~<span id="bl-013">BL-013</span>~~ | ~~Viewer reads OBJ/MTL material colors~~ — **DONE** ([viewer.js](web/js/viewer.js): MTLLoader + `hasMtl` skip in `_decorate`) | [FR-053](#26-server-mode) |
 | <span id="bl-014">BL-014</span> | VS Code extension embedding of the dresser SPA over a stdio / `transport_common` dual transport (the dresser has neither today) | [FR-052](#26-server-mode) |

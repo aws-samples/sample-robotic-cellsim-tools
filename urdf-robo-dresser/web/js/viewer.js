@@ -6,6 +6,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 import { ViewHelper } from "three/addons/helpers/ViewHelper.js";
@@ -15,6 +16,14 @@ import { PointerURDFDragControls } from "urdf-loader/URDFDragControls.js";
 const ROBOT_COLOR = 0xb8bfc6; // neutral grey
 const TOOL_COLOR = 0xff8a3d;  // accent orange — distinguishes tool geometry
 const HULL_COLOR = 0x5fd07a;  // green — collision hull overlay
+
+/** True if node (or any ancestor) was loaded with MTL materials. */
+function hasMtlAncestor(node) {
+  for (let n = node; n; n = n.parent) {
+    if (n.userData?.hasMtl) return true;
+  }
+  return false;
+}
 /** Fresnel edge-glow shader for the reach envelope — transparent when viewed
  *  head-on, glowing blue/cyan at grazing angles (like a holographic boundary). */
 function createReachMaterial() {
@@ -290,7 +299,26 @@ export class Viewer {
           finishTask(obj);
         };
         if (ext === "obj") {
-          new OBJLoader(mgr).load(path, finish, undefined, () => finish(null));
+          // Try the paired .mtl first (same basename, served at same path).
+          // On success: real material colors. On 404: plain OBJ fallback.
+          const mtlUrl = path.replace(/\.obj$/i, ".mtl");
+          new MTLLoader(mgr).load(
+            mtlUrl,
+            (materials) => {
+              materials.preload();
+              new OBJLoader(mgr)
+                .setMaterials(materials)
+                .load(path, (obj) => {
+                  if (obj) obj.userData.hasMtl = true;
+                  finish(obj);
+                }, undefined, () => finish(null));
+            },
+            undefined,
+            () => {
+              // No .mtl found — load OBJ without materials (fallback to _decorate).
+              new OBJLoader(mgr).load(path, finish, undefined, () => finish(null));
+            },
+          );
         } else if (ext === "stl") {
           new STLLoader(mgr).load(path, (geo) => finish(new THREE.Mesh(geo)), undefined, () => finish(null));
         } else if (ext === "dae") {
@@ -302,10 +330,14 @@ export class Viewer {
     };
   }
 
-  /** Material pass for the visual robot: neutral, with tool geometry tinted. */
+  /** Material pass for the visual robot. Meshes with MTL materials keep their
+   *  real colors; meshes without (STL/DAE/generated hulls) get the neutral
+   *  grey/orange fallback. */
   _decorate(robot) {
     robot.traverse((node) => {
       if (!node.isMesh) return;
+      // Walk up to find the mesh-group tagged by loadMeshCb.
+      if (hasMtlAncestor(node)) return; // real MTL colors — don't override
       const color = node.userData.isTool ? TOOL_COLOR : ROBOT_COLOR;
       node.material = new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.7 });
     });
