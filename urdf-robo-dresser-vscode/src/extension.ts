@@ -97,6 +97,12 @@ async function startAndOpenViewer(context: vscode.ExtensionContext): Promise<voi
       return;
     }
     catalogue = picked;
+    // Persist the pick to `roboDresser.catalogue` (same setting the
+    // Configuration sidebar's "Catalogue directory" field reads/writes —
+    // see `directory-settings.ts` in the host extension) so this prompt does
+    // not reappear on every launch; mirrors `roboticCellTools.cellDir`'s
+    // already-persisted, prompt-free behavior once set.
+    await persistCatalogue(catalogue);
   }
 
   const options: RoboDresserStartOptions = { catalogue, port, binaryPath, webRoot };
@@ -107,6 +113,21 @@ async function startAndOpenViewer(context: vscode.ExtensionContext): Promise<voi
 
   RoboDresserViewerPanel.createOrShow(context, manager!.baseUrl()!);
   manager!.startReachabilityMonitor(REACHABILITY_INTERVAL_MS);
+}
+
+/**
+ * Persist `value` to `roboDresser.catalogue`, using the same
+ * Workspace-if-a-workspace-folder-is-open-else-Global target rule already
+ * used by the host extension's directory-setting pickers
+ * (`DirectorySettingsController.pickValue` / `extension.ts`'s
+ * `writeSetting`), so a folder picked here behaves identically to one picked
+ * through the Configuration sidebar's "Catalogue directory" field.
+ */
+async function persistCatalogue(value: string): Promise<void> {
+  const target = vscode.workspace.workspaceFolders?.length
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+  await vscode.workspace.getConfiguration("roboDresser").update("catalogue", value, target);
 }
 
 /**
