@@ -13,9 +13,13 @@ import { ViewHelper } from "three/addons/helpers/ViewHelper.js";
 import URDFLoader from "urdf-loader";
 import { PointerURDFDragControls } from "urdf-loader/URDFDragControls.js";
 
-const ROBOT_COLOR = 0xb8bfc6; // neutral grey
-const TOOL_COLOR = 0xff8a3d;  // accent orange — distinguishes tool geometry
-const HULL_COLOR = 0x5fd07a;  // green — collision hull overlay
+const ROBOT_COLOR = 0xb8bfc6; // neutral grey — robot geometry is themed by its own MTL colors, not the UI theme
+
+/** Read a `--css-var` from `:root` (kept live so theme.js's overrides apply immediately). */
+function cssVar(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
 
 /** True if node (or any ancestor) was loaded with MTL materials. */
 function hasMtlAncestor(node) {
@@ -116,7 +120,7 @@ export class Viewer {
     this.showReach = false;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1c1e);
+    this.scene.background = new THREE.Color().setStyle(cssVar("--bg", "#1a1c1e"));
 
     // Work natively in URDF's Z-up frame so the models, the origin axes, and
     // the corner gizmo all agree. (Rotating a Y-up scene instead makes the
@@ -146,9 +150,14 @@ export class Viewer {
   _initSceneDecor() {
     // GridHelper lies in the XZ plane by default; rotate it into the Z-up
     // XY plane so it reads as the floor in the URDF frame.
-    const grid = new THREE.GridHelper(10, 20, 0x3a3f44, 0x2c3034);
+    const grid = new THREE.GridHelper(
+      10, 20,
+      new THREE.Color().setStyle(cssVar("--line", "#3a3f44")),
+      new THREE.Color().setStyle(cssVar("--bg-elev", "#2c3034")),
+    );
     grid.rotation.x = Math.PI / 2;
     this.scene.add(grid);
+    this._grid = grid; // kept so refreshTheme() can recolor it live
 
     const axes = new THREE.AxesHelper(0.5); // X=red, Y=green, Z=blue (Z up)
     this.scene.add(axes);
@@ -338,7 +347,9 @@ export class Viewer {
       if (!node.isMesh) return;
       // Walk up to find the mesh-group tagged by loadMeshCb.
       if (hasMtlAncestor(node)) return; // real MTL colors — don't override
-      const color = node.userData.isTool ? TOOL_COLOR : ROBOT_COLOR;
+      const color = node.userData.isTool
+        ? new THREE.Color().setStyle(cssVar("--accent", "#ff8a3d"))
+        : ROBOT_COLOR;
       node.material = new THREE.MeshStandardMaterial({ color, metalness: 0.1, roughness: 0.7 });
     });
   }
@@ -364,7 +375,8 @@ export class Viewer {
         collision.traverse((node) => {
           if (node.isMesh) {
             node.material = new THREE.MeshBasicMaterial({
-              color: HULL_COLOR, wireframe: true, transparent: true, opacity: 0.6,
+              color: new THREE.Color().setStyle(cssVar("--ok", "#5fd07a")),
+              wireframe: true, transparent: true, opacity: 0.6,
             });
           }
         });
@@ -400,6 +412,52 @@ export class Viewer {
     this.camera.far = radius * 100;
     this.camera.updateProjectionMatrix();
     this.controls.update();
+  }
+
+  /**
+   * Re-read the `--bg` / `--line` / `--bg-elev` / `--accent` / `--ok` CSS
+   * variables and re-apply them to the scene background, floor grid, tool
+   * meshes, and any loaded collision-hull overlay — called by `theme.js`
+   * whenever the host (Kiro/VS Code) theme changes, so an already-open
+   * viewer updates live instead of only picking up the new theme on the
+   * next URDF load.
+   */
+  refreshTheme() {
+    this.scene.background = new THREE.Color().setStyle(cssVar("--bg", "#1a1c1e"));
+
+    if (this._grid) {
+      const gridColors = this._grid.material;
+      const mats = Array.isArray(gridColors) ? gridColors : [gridColors];
+      // GridHelper's two colors are baked into its vertex colors at
+      // construction, not swappable via material — simplest correct fix is
+      // rebuilding it in place.
+      this.scene.remove(this._grid);
+      this._grid.geometry.dispose();
+      mats.forEach((m) => m.dispose());
+      const grid = new THREE.GridHelper(
+        10, 20,
+        new THREE.Color().setStyle(cssVar("--line", "#3a3f44")),
+        new THREE.Color().setStyle(cssVar("--bg-elev", "#2c3034")),
+      );
+      grid.rotation.x = Math.PI / 2;
+      this.scene.add(grid);
+      this._grid = grid;
+    }
+
+    if (this.robot) {
+      const toolColor = new THREE.Color().setStyle(cssVar("--accent", "#ff8a3d"));
+      this.robot.traverse((node) => {
+        if (node.isMesh && node.userData.isTool && !hasMtlAncestor(node)) {
+          node.material.color.copy(toolColor);
+        }
+      });
+    }
+    if (this._collisionGroup) {
+      const hullColor = new THREE.Color().setStyle(cssVar("--ok", "#5fd07a"));
+      this._collisionGroup.traverse((node) => {
+        if (node.isMesh) node.material.color.copy(hullColor);
+      });
+    }
   }
 
   /** FR-055: drive a joint; urdf-loader propagates to downstream links. */

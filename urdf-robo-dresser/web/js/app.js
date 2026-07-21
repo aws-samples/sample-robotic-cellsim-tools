@@ -2,6 +2,7 @@
 // sources -> Dress -> load the dressed URDF -> orbit + joint sliders.
 // Framework-free ES modules, mirroring the fitting-room's app.js style.
 
+import "./theme.js"; // side effect only: applies Kiro/VS Code theme colors when embedded
 import * as api from "./api.js";
 import { Viewer } from "./viewer.js";
 import { buildJointSliders } from "./joints.js";
@@ -30,6 +31,10 @@ let jointSliders = { setValue() {}, highlight() {} };
 function showJoints(robot) {
   jointSliders = buildJointSliders(jointsEl, robot, viewer);
 }
+
+// Re-color the WebGL scene (background/grid/tool/hulls) when the host theme
+// changes (see js/theme.js) — CSS-var changes alone don't repaint canvas content.
+window.addEventListener("robo-dresser:theme-applied", () => viewer.refreshTheme());
 
 // Dragging a joint in the viewport updates its slider live (FR-059).
 viewer.onJointChange = (name, value) => jointSliders.setValue(name, value);

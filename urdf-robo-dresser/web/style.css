@@ -1,3 +1,11 @@
+/*
+ * Defaults below are the standalone (plain-browser) palette. When embedded
+ * in the `urdf-robo-dresser-vscode` webview panel, `js/theme.js` overrides
+ * these same custom properties on `documentElement` with the active Kiro/VS
+ * Code theme's colors (relayed from the wrapper panel via postMessage — see
+ * `viewerHtml.ts`), so the viewer matches the editor instead of always
+ * rendering this fixed dark palette.
+ */
 :root {
   --bg: #1a1c1e;
   --bg-pane: #232629;
@@ -5,6 +13,7 @@
   --fg: #d0d4d8;
   --fg-muted: #7a818a;
   --accent: #ff8a3d;
+  --accent-fg: #1a1c1e;
   --line: #3a3f44;
   --selected: #ffa566;
   --ok: #5fd07a;
@@ -104,7 +113,7 @@ details summary { cursor: pointer; padding: 4px 0; font-weight: 500; }
 
 #output-badge {
   display: inline-block; margin-bottom: 5px;
-  font-size: 10px; font-weight: 500; color: #1a1c1e;
+  font-size: 10px; font-weight: 500; color: var(--accent-fg);
   background: var(--ok); padding: 2px 7px; border-radius: 3px;
 }
 #output-badge[hidden] { display: none; }
@@ -171,7 +180,7 @@ details summary { cursor: pointer; padding: 4px 0; font-weight: 500; }
 #inspector .btn-row { display: flex; gap: 6px; margin-top: 8px; }
 #btn-dress {
   flex: 1;
-  background: var(--accent); border: 1px solid var(--accent); color: #1a1c1e;
+  background: var(--accent); border: 1px solid var(--accent); color: var(--accent-fg);
   border-radius: 3px; padding: 6px 10px; cursor: pointer;
   font-size: 12px; font-weight: 500;
 }
