@@ -54,29 +54,6 @@ asserts the resolved set equals the authored `assets/data-captures/ros-topics.tx
 including an 8th robot (`robot_08`) that has a topic but no capture columns (flagged
 `has_csv_data = false`).
 
-## The degrees→radians mapping
-
-The capture is raw KUKA axis readings in degrees. Measured across the whole capture,
-axes A2/A3/A5 sit **outside** the URDF limits on every robot — A2 in particular reads
-around −110°..−225° against a `[-2.71, 0.61]` rad bound, i.e. a ~180° (~π) zero offset
-between the KUKA axis convention and the URDF model frame.
-
-A naive deg→rad would hand PhysX a target it clamps at the joint stop, jamming the arm.
-R3's mapping is a per-axis affine:
-
-```
-rad[i] = sign[i] · deg[i] · (π/180) + offset_rad[i]
-```
-
-- **Default** is the identity (`sign = +1`, `offset = 0`) = plain deg→rad. Faithful unit
-  conversion, no silent correction.
-- **`clamp_to_limits`** (config / `--clamp`) pins an out-of-range target to the URDF
-  bound and counts it; `warn_out_of_range` logs each one. A run that reports
-  "N clamped" with N large means your offsets are wrong, not that the arm is fine.
-- Tune `sign`/`offset_rad` per axis (cell-wide `default_axes`, or `per_robot`) to land
-  the trace inside the limits. For this capture an A2 `offset_rad` near `+π` is the
-  starting point.
-
 ## Playback scheduling
 
 `build_plan` resolves everything once (scene, per-robot URDF limits + axis maps, CSV
@@ -90,13 +67,41 @@ fully-populated six-axis pose is published.
 
 The engine writes to a `CommandSink` and never knows the wire:
 
-- **`Ros2ClientSink`** (the default transport): pure-Rust `ros2-client` over RustDDS.
-  Speaks RTPS straight to Isaac's FastDDS/Cyclone bridge over a shared `ROS_DOMAIN_ID` —
-  no rcl, no ROS install, no native deps. JointState is registered as the DDS type
-  `sensor_msgs::msg::dds_::JointState_`. This is what `run` uses.
+- **`Ros2ClientSink`** (`--sink dds`, the default transport): pure-Rust `ros2-client` over
+  RustDDS. Speaks RTPS straight to Isaac's FastDDS/Cyclone bridge over a shared
+  `ROS_DOMAIN_ID` — no rcl, no ROS install, no native deps. JointState is registered as the
+  DDS type `sensor_msgs::msg::dds_::JointState_`. This is what `run` uses by default.
+  Discovery is **multicast**, so it needs R3 and Isaac on the **same subnet**.
 - **`StdoutSink`** (preview, zero-dep): prints the `ros2 topic pub` equivalent instead of
   publishing. This is `dry-run` (and `--sink stdout`) and the deterministic
   golden-output source — useful when there's no live ROS graph to publish to.
+- **`ZenohSink`** (`--sink zenoh`): publishes over Zenoh (**TCP unicast to an explicit IP**)
+  to [`robo-zenoh-bridge`](../../robo-zenoh-bridge), which republishes onto Isaac's local
+  DDS. This is the **cross-host / cross-VPC** path — it works where DDS multicast discovery
+  can't (e.g. two EC2 instances). Pulled TCP-only, so R3 stays pure-Rust with no C toolchain.
+
+### The Zenoh cross-host path
+
+DDS finds Isaac by multicast; an AWS VPC drops multicast, so two-EC2 deployments never
+discover each other. The Zenoh sink replaces discovery with an explicit endpoint:
+
+- **Wire contract** (shared in `robo_ros_runner::transport::zenoh`, imported by the bridge
+  so it can't drift):
+  - *Key expr* — `/<cell>/<robot>/joint_command` → `r3/<cell>/<robot>/joint_command`
+    (prefix + strip leading `/`). Reversible because every segment already passed
+    `sanitize_ros_segment`. The bridge subscribes `r3/**`.
+  - *Payload* — `serde_json` of `ZenohJointCommand { topic, names, positions, sec, nanosec }`.
+    Self-describing (no schema drift); the topic is carried in the payload (authoritative)
+    and in the key expr (cross-check).
+- **Run it:** start `robo-zenoh-bridge` on the Isaac host (zero-arg `cargo run`); it prints
+  the exact line to paste into R3:
+  ```sh
+  robo-ros-runner run --cell <cell.yaml> --csv <capture.csv> \
+      --sink zenoh --zenoh-connect tcp/<isaac-ip>:7447 --zenoh-key-prefix r3
+  ```
+  Open inbound **TCP 7447** on the Isaac host; keep the bridge's `--domain` matched to
+  Isaac's `ROS_DOMAIN_ID` and `--zenoh-key-prefix` matched on both ends. See the
+  [bridge README](../../robo-zenoh-bridge/README.md).
 
 ## End-to-end verification against Isaac Sim
 
@@ -106,10 +111,13 @@ The engine writes to a `CommandSink` and never knows the wire:
    ```sh
    robo-ros-runner dry-run --cell <cell.yaml> --csv <capture.csv> --once
    ```
-3. Real replay (DDS is the default transport):
+3. Real replay (DDS is the default transport, same-subnet):
    ```sh
    robo-ros-runner run --config r3-run.example.yaml --ros-domain-id 0
    ```
+   Cross-host / across a VPC, run `robo-zenoh-bridge` on the Isaac host and replace the
+   transport with `--sink zenoh --zenoh-connect tcp/<isaac-ip>:7447` (see the Zenoh
+   cross-host path above).
 4. Confirm from a ROS 2 shell:
    ```sh
    ros2 topic echo /Demo_Cell/robot_01/joint_command   # R3 publishing

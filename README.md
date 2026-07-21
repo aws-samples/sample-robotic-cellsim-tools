@@ -96,6 +96,7 @@ export CARGO_HOME="$PWD/.cargo"    # vendor crates + caches under the repo
 cargo build --release --manifest-path urdf-robo-dresser/Cargo.toml
 cargo build --release --manifest-path robo-fitting-room/Cargo.toml
 cargo build --release --manifest-path robo-ros-runner/Cargo.toml
+cargo build --release --manifest-path robo-zenoh-bridge/Cargo.toml
 ```
 
 ---
@@ -150,13 +151,31 @@ Replays a captured joint-angle timeline (CSV — e.g. a KUKA PROFINET capture)
 onto the cell's ROS 2 `joint_command` topics, driving the robots in a running
 Isaac Sim. Applies a configurable per-axis deg→rad mapping so raw vendor
 captures don't slam into URDF joint limits. `dry-run` previews the publishes;
-`run` speaks DDS for real.
+`run` speaks DDS for real, or Zenoh (`--sink zenoh`) to reach Isaac across hosts.
 
 ```sh
 robo-ros-runner dry-run --cell demo-cell.yaml --csv joint_angles_timeline.csv --once
 ```
 
 → [robo-ros-runner/README.md](robo-ros-runner/README.md)
+
+### `robo-zenoh-bridge` — drive Isaac across hosts (Zenoh → DDS)
+
+R3's DDS transport finds Isaac via multicast, which works on a shared LAN but not
+across an AWS VPC (two EC2 instances). This bridge runs **on the Isaac host**,
+subscribes to R3's joint commands over **Zenoh (TCP unicast to an explicit IP)**,
+and republishes them onto Isaac's local DDS. Zero-arg `cargo run` — it prints the
+exact `--zenoh-connect` line to paste into R3.
+
+```sh
+# on the Isaac host
+robo-zenoh-bridge                                # listens tcp/0.0.0.0:7447 → DDS domain 0
+# then on the R3 host, per the printed banner:
+robo-ros-runner run --cell demo-cell.yaml --csv cap.csv \
+    --sink zenoh --zenoh-connect tcp/<isaac-ip>:7447
+```
+
+→ [robo-zenoh-bridge/README.md](robo-zenoh-bridge/README.md)
 
 ---
 
@@ -173,6 +192,7 @@ robotic-cellsim-tools/
 ├── robo-ros-runner/                ← Rust crate: CSV → ROS 2 joint_command replay (R3)
 │   ├── REQUIREMENTS.md             ← FR/NFR tracker (single source of progress)
 │   └── r3-run.example.yaml         ← sample run config
+├── robo-zenoh-bridge/              ← Rust crate: Zenoh → DDS bridge (run on the Isaac host)
 └── assets/
     ├── urdf-robot-collection/      ← bare robot URDFs (vendor-specific)
     ├── urdf-tool-collection/       ← bare tool URDFs (vendor-specific)
@@ -216,4 +236,6 @@ Each crate's `docs/` is the in-depth reference:
   [Concepts](robo-ros-runner/docs/concepts.md) ·
   [`openapi.json`](robo-ros-runner/openapi.json) ·
   [Requirements tracker](robo-ros-runner/REQUIREMENTS.md)
+- **robo-zenoh-bridge** —
+  [README](robo-zenoh-bridge/README.md)
 
