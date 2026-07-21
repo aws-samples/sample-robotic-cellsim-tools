@@ -60,6 +60,13 @@ uuid = { version = "1", features = ["v4"] }
 # patch dropped). 0.8 pins a compatible rustdds.
 ros2-client = { version = "0.8" }
 
+# Zenoh transport (FR-407) — pure-Rust, TCP-only. `default-features = false`
+# drops the QUIC/TLS/shared-memory stacks (ring/aws-lc/quinn), leaving only the
+# pure-Rust `dirs-sys` shim: no C compiler / native deps, so NFR-100 holds.
+# Publishes to an explicit `tcp/<ip>:7447` endpoint — the cross-VPC path DDS
+# multicast discovery can't take. Republished onto Isaac's DDS by robo-zenoh-bridge.
+zenoh = { version = "1", default-features = false, features = ["transport_tcp"] }
+
 [dev-dependencies]
 tempfile = "3"
 pretty_assertions = "1"

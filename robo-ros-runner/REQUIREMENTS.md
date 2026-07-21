@@ -69,6 +69,7 @@ Target: standalone open-source release.
 | FR-404 | Published positions SHALL be radians; velocity and effort SHALL be empty. | Must | A published JointState carries six radian positions and empty velocity/effort. | [DONE](src/transport/jointstate.rs#L40) |
 | FR-405 | The DDS transport SHALL use a configurable `ROS_DOMAIN_ID`. | Must | `--ros-domain-id N` participates on DDS domain N. | [DONE](src/transport/dds.rs#L29) |
 | FR-406 | The tool SHALL provide a rosbridge (websocket) sink for the future WebApp. | Should | A browser client drives playback over a rosbridge websocket. | BACKLOG |
+| FR-407 | The tool SHALL provide a Zenoh sink that publishes joint commands over Zenoh (TCP unicast) to a remote bridge, for cross-host / cross-VPC delivery. | Should | `run --sink zenoh --zenoh-connect tcp/<ip>:7447` publishes each frame as a JSON `ZenohJointCommand` on key `<prefix>/<topic-without-leading-slash>`; `kind()=="zenoh"`; the topic↔key-expr mapping round-trips. | [DONE](src/transport/zenoh.rs#L1) |
 
 ### 2.5 Playback Scheduling
 
@@ -129,7 +130,7 @@ Target: standalone open-source release.
 
 | ID | Requirement | Priority | Acceptance Criteria | Status |
 |----|-------------|----------|---------------------|--------|
-| NFR-100 | The tool SHALL be pure Rust with no native deps — including the core ROS 2 / DDS transport (RustDDS, no rcl/ROS install). | Must | `cargo tree -e normal` contains no `cc`/`bindgen`/`*-sys` C-compiled crates. | [DONE](Cargo.toml) |
+| NFR-100 | The tool SHALL be pure Rust with no native deps — including the core ROS 2 / DDS transport (RustDDS, no rcl/ROS install) and the Zenoh transport (TCP-only, no QUIC/TLS/shm C stacks). | Must | `cargo tree -e normal` contains no C-compiled crates: no `cc`/`bindgen` build steps and no `*-sys` crate that compiles or links C sources. Pure-Rust FFI shims binding the always-present system libc (`libc`, `dirs-sys`, `windows-sys`) are permitted. | [DONE](Cargo.toml) |
 | NFR-101 | The tool SHALL build with a plain `cargo build` on macOS arm64 and Linux x86_64 — no build-mode feature flags. | Must | `cargo build` (no flags) produces the full CLI + DDS + server binary on the dev box. | [DONE](src/lib.rs#L1) |
 | NFR-102 | Replay SHALL be deterministic: same config + mock clock → identical StdoutSink output. | Must | A golden snapshot of the StdoutSink output is byte-stable. | [DONE](tests/requirements.rs) |
 | NFR-103 | The tool SHALL sustain ~83 Hz × 7 robots (≈581 msg/s) with negligible CPU. | Should | The hot loop reuses buffers; no per-frame allocation beyond the command vectors. | [DONE](src/playback.rs#L146) |
@@ -152,4 +153,4 @@ Items deferred for later implementation. Every item originates from a requiremen
 | BL-05 | CSV upload endpoint (`POST /api/v1/csv/upload`, multipart, sandboxed) | [FR-703](#27-server--web) |
 | BL-06 | Server-side DDS sink toggle so a playback job can publish real DDS | [FR-403](#24-transport--publish), [FR-704](#27-server--web) |
 | BL-07 | Velocity / effort feed-forward channel (currently position-only) | [FR-404](#24-transport--publish) |
-| BL-08 | Zenoh transport (`rmw_zenoh`) as an alternative to RustDDS | [FR-403](#24-transport--publish) |
+| BL-08 | Zenoh transport as an alternative to RustDDS — realized as [FR-407](#24-transport--publish) (`--sink zenoh` + the `robo-zenoh-bridge` companion crate) | [FR-403](#24-transport--publish) |

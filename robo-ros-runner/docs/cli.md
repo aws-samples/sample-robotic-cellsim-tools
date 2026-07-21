@@ -18,8 +18,10 @@ Replay a capture onto the selected sink.
 | `--end <f64>` | — | Stop after this time. |
 | `--robots <ids>` | all | Comma-separated robot_id filter. |
 | `--once` | off | Publish a single frame (at `--start`, or the first) and exit. |
-| `--sink <kind>` | `dds` | `dds` (real ROS 2 publish, default) or `stdout` (preview print). |
+| `--sink <kind>` | `dds` | `dds` (real ROS 2 publish, default), `stdout` (preview print), or `zenoh` (cross-host via a bridge). |
 | `--ros-domain-id <u32>` | `0` | DDS domain for the `dds` sink. |
+| `--zenoh-connect <ep>` | — | Zenoh connect endpoint, e.g. `tcp/10.0.0.5:7447` (repeatable). `--sink zenoh` only. |
+| `--zenoh-key-prefix <s>` | `r3` | Zenoh key-expr prefix; MUST match the bridge's `--key-prefix`. `--sink zenoh` only. |
 | `--clamp` | off | Force clamp-to-URDF-limits on (overrides config). |
 
 Either `--config`, or both `--cell` and `--csv`, are required. CLI flags override
@@ -33,7 +35,14 @@ robo-ros-runner run --config r3-run.example.yaml                 # publishes rea
 robo-ros-runner run --cell cell.yaml --csv cap.csv --rate 2 --robots robot_01
 robo-ros-runner run --config r3-run.example.yaml --ros-domain-id 0
 robo-ros-runner run --cell cell.yaml --csv cap.csv --sink stdout  # preview, no DDS
+robo-ros-runner run --config r3-run.example.yaml \
+    --sink zenoh --zenoh-connect tcp/10.0.1.50:7447                # cross-host via robo-zenoh-bridge
 ```
+
+The `zenoh` sink reaches Isaac across hosts / a VPC where DDS multicast can't: R3 publishes
+TCP unicast to `--zenoh-connect`, where [`robo-zenoh-bridge`](../../robo-zenoh-bridge)
+(running on the Isaac host) republishes onto Isaac's local DDS. See
+[concepts.md](concepts.md#the-zenoh-cross-host-path).
 
 ## `dry-run`
 

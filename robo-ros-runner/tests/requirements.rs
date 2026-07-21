@@ -20,7 +20,7 @@ use robo_ros_runner::transport::{CommandSink, JointCommand};
 use robo_ros_runner::{
     apply_cli_overrides, build_plan, inspect_csv, joint_limits_for_robot, load_run_config,
     make_sink, map_degrees_to_radians, publish_snapshot, resolve_topics, run_playback, AxisMap,
-    CliOverrides, CsvFormat, EmptyCellPolicy, JointLimits, RunConfig,
+    CliOverrides, CsvFormat, EmptyCellPolicy, JointLimits, RunConfig, SinkOptions,
 };
 
 // =============================================================================
@@ -318,7 +318,7 @@ fn fr_400_command_sink_trait() {
 /// FR-401: StdoutSink prints the ros2-topic-pub equivalent (zero-dep)
 #[test]
 fn fr_401_stdout_sink() {
-    let mut sink = make_sink(SinkKind::Stdout, 0).unwrap();
+    let mut sink = make_sink(SinkKind::Stdout, &SinkOptions::default()).unwrap();
     assert_eq!(sink.kind(), "stdout");
     let names = vec!["joint_a1".to_string()];
     let positions = vec![0.0];
@@ -351,7 +351,7 @@ fn fr_402_jointstate_msg_layout() {
 /// arm-tracking against Isaac is verified manually per docs/concepts.md.)
 #[test]
 fn fr_403_dds_sink() {
-    let sink = make_sink(SinkKind::Dds, 0).expect("dds sink builds");
+    let sink = make_sink(SinkKind::Dds, &SinkOptions::default()).expect("dds sink builds");
     assert_eq!(sink.kind(), "dds");
 }
 
@@ -369,7 +369,14 @@ fn fr_404_radians_positions() {
 /// FR-405: configurable ROS_DOMAIN_ID — the dds sink accepts a domain id.
 #[test]
 fn fr_405_ros_domain_id() {
-    let sink = make_sink(SinkKind::Dds, 42).expect("dds sink builds on domain 42");
+    let sink = make_sink(
+        SinkKind::Dds,
+        &SinkOptions {
+            domain_id: 42,
+            ..Default::default()
+        },
+    )
+    .expect("dds sink builds on domain 42");
     assert_eq!(sink.kind(), "dds");
 }
 
@@ -377,6 +384,35 @@ fn fr_405_ros_domain_id() {
 #[test]
 fn fr_406_rosbridge_sink() {
     todo!("rosbridge websocket sink — BL-02");
+}
+
+/// FR-407: Zenoh sink — `--sink zenoh` parses; the shared topic↔key-expr
+/// mapping round-trips and the JSON wire message serde round-trips. (The sink
+/// itself is not constructed here — that opens a Zenoh Session; the pure wire
+/// contract is what both R3 and robo-zenoh-bridge depend on.)
+#[test]
+fn fr_407_zenoh_sink() {
+    use robo_ros_runner::config::SinkKind;
+    use robo_ros_runner::transport::zenoh::{key_expr_to_topic, topic_to_key_expr, ZenohJointCommand};
+
+    assert_eq!(SinkKind::parse("zenoh").unwrap(), SinkKind::Zenoh);
+
+    let topic = "/K8URW11_Production_Cell/r_113190R01/joint_command";
+    let ke = topic_to_key_expr("r3", topic);
+    assert_eq!(ke, "r3/K8URW11_Production_Cell/r_113190R01/joint_command");
+    assert_eq!(key_expr_to_topic("r3", &ke), topic);
+
+    let wire = ZenohJointCommand {
+        topic: topic.to_string(),
+        names: vec!["joint_a1".into()],
+        positions: vec![0.5],
+        sec: 1,
+        nanosec: 2,
+    };
+    assert_eq!(
+        ZenohJointCommand::from_bytes(&wire.to_bytes().unwrap()).unwrap(),
+        wire
+    );
 }
 
 // =============================================================================
@@ -500,7 +536,7 @@ fn fr_508_injectable_clock() {
 fn fr_600_604_cli_paths() {
     let (_d, cfg) = tiny_cell(TWO_FRAMES);
     let plan = build_plan(&cfg).unwrap();
-    let mut sink = make_sink(SinkKind::Stdout, 0).unwrap();
+    let mut sink = make_sink(SinkKind::Stdout, &SinkOptions::default()).unwrap();
     let report = run_playback(&plan, sink.as_mut(), &MockClock, &CancelFlag::new()).unwrap();
     assert_eq!(report.frames_published, 2);
 }

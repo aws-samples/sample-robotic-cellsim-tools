@@ -1,11 +1,13 @@
 pub mod dds;
 pub mod jointstate;
 pub mod stdout;
+pub mod zenoh;
 
 pub use jointstate::JointStateMsg;
 pub use stdout::StdoutSink;
+pub use zenoh::ZenohSink;
 
-use crate::config::SinkKind;
+use crate::config::{SinkKind, SinkOptions};
 use crate::error::R3Error;
 use crate::topics::ResolvedTopic;
 
@@ -56,12 +58,17 @@ pub trait CommandSink {
     fn kind(&self) -> &'static str;
 }
 
-// FR-401, FR-403, FR-405. Build the requested sink. DDS is the real (default)
-// transport; the StdoutSink is the dry-run preview.
-pub fn make_sink(kind: SinkKind, domain_id: u32) -> Result<Box<dyn CommandSink>, R3Error> {
+// FR-401, FR-403, FR-405, FR-407. Build the requested sink. DDS is the real
+// (default) transport; the StdoutSink is the dry-run preview; the ZenohSink is
+// the cross-host path. Each sink reads only the SinkOptions fields it needs.
+pub fn make_sink(kind: SinkKind, opts: &SinkOptions) -> Result<Box<dyn CommandSink>, R3Error> {
     match kind {
-        SinkKind::Dds => Ok(Box::new(dds::Ros2ClientSink::new(domain_id)?)),
+        SinkKind::Dds => Ok(Box::new(dds::Ros2ClientSink::new(opts.domain_id)?)),
         SinkKind::Stdout => Ok(Box::new(StdoutSink::new())),
+        SinkKind::Zenoh => Ok(Box::new(ZenohSink::new(
+            &opts.zenoh_connect,
+            &opts.zenoh_key_prefix,
+        )?)),
     }
 }
 

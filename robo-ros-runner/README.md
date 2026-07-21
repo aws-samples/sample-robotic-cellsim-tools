@@ -17,9 +17,11 @@ flowchart LR
     CSV[/"captured joint timeline · CSV<br/><i>degrees</i>"/]:::data
     R3(["<b>robo-ros-runner</b><br/><i>deg→rad map · +clamp/affine</i>"]):::tool
     ROS[["ROS 2 / DDS · joint_command topics<br/><i>JointState · radians</i>"]]:::sim
+    BRIDGE(["<b>robo-zenoh-bridge</b><br/><i>on the Isaac host</i>"]):::tool
     ISAAC{{"Isaac Sim bridge"}}:::sim
 
-    CSV --> R3 ==> ROS --> ISAAC
+    CSV --> R3 ==>|"--sink dds · same subnet"| ROS --> ISAAC
+    R3 -.->|"--sink zenoh · TCP unicast<br/>cross-host / VPC"| BRIDGE ==> ROS
 
     classDef tool fill:#11151c,stroke:#00e5ff,stroke-width:3px,color:#7CFFCB,font-weight:bold,font-size:15px;
     classDef data fill:#0d1117,stroke:#ff2bd6,stroke-width:1px,color:#ffb3f0;
@@ -71,17 +73,17 @@ install; speaks RTPS straight to Isaac's FastDDS bridge over a shared `ROS_DOMAI
 `run` publishes real DDS by default; `dry-run` (or `--sink stdout`) prints the
 `ros2 topic pub` equivalent instead, for previewing without a live ROS graph.
 
-## The degrees→radians problem
+### Transports (`--sink`)
 
-The capture is raw KUKA axis readings in **degrees**, and some exceed the URDF joint
-limits (e.g. `joint_a2` reads ~−200° vs its `[-2.71, 0.61]` rad bound — a ~180° zero
-offset between the KUKA convention and the URDF model frame). A naive deg→rad would
-command poses PhysX clamps at the joint stops, jamming the arm.
+| Sink | Flag | Reaches Isaac | Notes |
+|------|------|---------------|-------|
+| DDS | `--sink dds` (default) | same subnet (multicast discovery) | RTPS straight to Isaac's bridge over a shared `ROS_DOMAIN_ID`. |
+| stdout | `--sink stdout` / `dry-run` | — | Prints the `ros2 topic pub` equivalent; no live ROS graph needed. |
+| Zenoh | `--sink zenoh` | **cross-host / across a VPC** | TCP unicast to an explicit `--zenoh-connect tcp/<ip>:7447`, where [`robo-zenoh-bridge`](../robo-zenoh-bridge) (running on the Isaac host) republishes onto Isaac's local DDS. Solves the two-EC2 case DDS multicast can't. |
 
-R3 ships a configurable per-axis affine map `rad = sign · deg · π/180 + offset_rad`
-(default identity) plus an optional `clamp_to_limits` that pins out-of-range targets to
-the URDF bound and warns. Tune the real KUKA→URDF `sign`/`offset` per axis in the run
-config. See [docs/concepts.md](docs/concepts.md).
+R3 stays pure Rust with the Zenoh sink: `zenoh` is pulled TCP-only
+(`default-features = false, features = ["transport_tcp"]`), so no QUIC/TLS/shm C
+stacks — a plain `cargo build` still needs nothing but a Rust toolchain.
 
 ## Subcommands
 
@@ -98,7 +100,7 @@ config. See [docs/concepts.md](docs/concepts.md).
 
 - [docs/cli.md](docs/cli.md) — full CLI flag reference
 - [docs/api.md](docs/api.md) — REST API surface
-- [docs/concepts.md](docs/concepts.md) — topic resolution, the deg→rad mapping, end-to-end verification against Isaac
+- [docs/concepts.md](docs/concepts.md) — topic resolution, transports, end-to-end verification against Isaac
 - [REQUIREMENTS.md](REQUIREMENTS.md) — FR/NFR tracker (single source of progress)
 
 ## Tests
