@@ -11,7 +11,7 @@ pub mod transport;
 
 pub use config::{
     apply_cli_overrides, load_run_config, CliOverrides, CsvFormat, EmptyCellPolicy, RunConfig,
-    SinkKind,
+    SinkKind, SinkOptions,
 };
 pub use csv_intake::{frame_reader, inspect_csv, CsvSchema, Frame};
 pub use error::R3Error;

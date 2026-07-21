@@ -39,6 +39,9 @@ pub enum SinkKind {
     /// Print the `ros2 topic pub` equivalent instead of publishing — the
     /// dry-run / preview path (no live ROS graph needed).
     Stdout,
+    /// Publish over Zenoh (TCP unicast) to a remote robo-zenoh-bridge that
+    /// republishes onto Isaac's local DDS — the cross-host / cross-VPC path.
+    Zenoh,
 }
 
 impl SinkKind {
@@ -46,10 +49,33 @@ impl SinkKind {
         match s.to_ascii_lowercase().as_str() {
             "stdout" | "dry-run" | "dryrun" => Ok(Self::Stdout),
             "dds" | "ros2" => Ok(Self::Dds),
+            "zenoh" => Ok(Self::Zenoh),
             other => Err(R3Error::Config(format!(
-                "unknown sink '{}' (expected 'stdout' or 'dds')",
+                "unknown sink '{}' (expected 'stdout', 'dds', or 'zenoh')",
                 other
             ))),
+        }
+    }
+}
+
+/// Per-run transport knobs passed to [`crate::make_sink`]. `domain_id` feeds the
+/// DDS sink; the `zenoh_*` fields feed the Zenoh sink. Each sink ignores the
+/// fields it doesn't use.
+#[derive(Debug, Clone)]
+pub struct SinkOptions {
+    pub domain_id: u32,
+    /// Zenoh connect endpoint(s), e.g. `["tcp/10.0.0.5:7447"]`.
+    pub zenoh_connect: Vec<String>,
+    /// Zenoh key-expr prefix; must match the bridge's `--key-prefix`.
+    pub zenoh_key_prefix: String,
+}
+
+impl Default for SinkOptions {
+    fn default() -> Self {
+        Self {
+            domain_id: 0,
+            zenoh_connect: Vec::new(),
+            zenoh_key_prefix: crate::transport::zenoh::DEFAULT_KEY_PREFIX.to_string(),
         }
     }
 }

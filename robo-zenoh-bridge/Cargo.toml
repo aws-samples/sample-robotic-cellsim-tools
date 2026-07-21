@@ -1,0 +1,27 @@
+[package]
+name = "robo-zenoh-bridge"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Subscribe joint commands over Zenoh and republish them onto Isaac's local ROS 2 / DDS (companion to robo-ros-runner's Zenoh sink)"
+
+[lib]
+name = "robo_zenoh_bridge"
+path = "src/lib.rs"
+
+[[bin]]
+name = "robo-zenoh-bridge"
+path = "src/main.rs"
+
+[dependencies]
+# Reuse R3's Ros2ClientSink + the SHARED wire contract (key-expr fns +
+# ZenohJointCommand) so the encoding can never drift from R3's ZenohSink.
+robo-ros-runner = { path = "../robo-ros-runner" }
+# Same pure-Rust, TCP-only Zenoh as R3 — no C toolchain needed on the Isaac host.
+zenoh = { version = "1", default-features = false, features = ["transport_tcp"] }
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"

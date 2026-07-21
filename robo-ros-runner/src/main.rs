@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use robo_ros_runner::{
     apply_cli_overrides, build_plan, inspect_csv, load_run_config, make_sink, publish_snapshot,
     resolve_topics, run_playback, CliOverrides, CsvFormat, RealClock, RunConfig, SinkKind,
+    SinkOptions,
 };
 use robo_ros_runner::playback::CancelFlag;
 
@@ -144,12 +145,18 @@ struct RunArgs {
     /// Publish a single frame (at --start, or the first) and exit.
     #[arg(long)]
     once: bool,
-    /// Transport: `dds` (default, real ROS 2 publish) or `stdout` (preview).
+    /// Transport: `dds` (default), `stdout` (preview), or `zenoh` (cross-host).
     #[arg(long, default_value = "dds")]
     sink: String,
     /// ROS_DOMAIN_ID for the DDS sink.
     #[arg(long, default_value_t = 0)]
     ros_domain_id: u32,
+    /// Zenoh connect endpoint(s), e.g. `tcp/10.0.0.5:7447` (repeatable). `--sink zenoh` only.
+    #[arg(long)]
+    zenoh_connect: Vec<String>,
+    /// Zenoh key-expr prefix; MUST match the bridge's `--key-prefix`. `--sink zenoh` only.
+    #[arg(long, default_value = "r3")]
+    zenoh_key_prefix: String,
     /// Force clamp-to-URDF-limits on (overrides config).
     #[arg(long)]
     clamp: bool,
@@ -213,7 +220,12 @@ fn cmd_run(args: &RunArgs, force_stdout: bool) -> i32 {
             }
         }
     };
-    let mut sink = match make_sink(sink_kind, args.ros_domain_id) {
+    let opts = SinkOptions {
+        domain_id: args.ros_domain_id,
+        zenoh_connect: args.zenoh_connect.clone(),
+        zenoh_key_prefix: args.zenoh_key_prefix.clone(),
+    };
+    let mut sink = match make_sink(sink_kind, &opts) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("ERROR: {}", e);
@@ -260,6 +272,8 @@ fn cmd_validate(config: Option<PathBuf>, cell: Option<PathBuf>, csv: Option<Path
         once: false,
         sink: "stdout".to_string(),
         ros_domain_id: 0,
+        zenoh_connect: Vec::new(),
+        zenoh_key_prefix: "r3".to_string(),
         clamp: false,
     };
     let cfg = match config_from_run_args(&args) {
