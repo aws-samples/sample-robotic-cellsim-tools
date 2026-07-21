@@ -13,13 +13,31 @@ IP** (this host), and the bridge republishes onto DDS over **loopback**, where
 Isaac's ROS 2 bridge is already subscribed. No multicast between hosts, no
 `ROS_DOMAIN_ID` guesswork across the network — just a TCP connection.
 
-```
-R3 host                         Isaac host
-──────────                      ────────────────────────────
-robo-ros-runner                 robo-zenoh-bridge   Isaac Sim
-  --sink zenoh   ── Zenoh TCP ──▶  (this crate)  ── DDS ──▶ ROS 2 bridge
-  --zenoh-connect                  republish          (loopback multicast)
-  tcp/<isaac-ip>:7447
+```mermaid
+%%{init: {'theme':'base','themeVariables':{
+  'background':'#0a0e14','primaryColor':'#11151c','primaryTextColor':'#e6faff',
+  'primaryBorderColor':'#00e5ff','lineColor':'#00e5ff','fontFamily':'monospace',
+  'clusterBkg':'#0a0e14','clusterBorder':'#1f6feb'}}}%%
+flowchart LR
+    CSV[/"captured joint timeline · CSV"/]:::data
+
+    subgraph R3H["R3 host"]
+      R3(["<b>robo-ros-runner</b><br/><i>--sink zenoh</i>"]):::tool
+    end
+
+    subgraph ISH["Isaac host"]
+      BRIDGE(["<b>robo-zenoh-bridge</b><br/><i>this crate</i>"]):::tool
+      ROS[["ROS 2 / DDS · joint_command<br/><i>loopback multicast</i>"]]:::sim
+      ISAAC{{"Isaac Sim bridge"}}:::sim
+    end
+
+    CSV --> R3
+    R3 ==>|"Zenoh · TCP unicast<br/>tcp/&lt;isaac-ip&gt;:7447"| BRIDGE
+    BRIDGE ==>|"DDS republish"| ROS --> ISAAC
+
+    classDef tool fill:#11151c,stroke:#00e5ff,stroke-width:3px,color:#7CFFCB,font-weight:bold,font-size:15px;
+    classDef data fill:#0d1117,stroke:#ff2bd6,stroke-width:1px,color:#ffb3f0;
+    classDef sim  fill:#11151c,stroke:#b6ff00,stroke-width:2px,color:#eaffb0;
 ```
 
 Pure Rust, TCP-only Zenoh — **no C toolchain** (no clang/cmake). Just a Rust
