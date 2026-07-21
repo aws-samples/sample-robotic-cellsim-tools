@@ -1,7 +1,7 @@
 {
   "name": "urdf-robo-dresser-vscode",
-  "displayName": "robo-dresser",
-  "description": "Browser-based 3D URDF dressing viewer for industrial robots and tools, hosted inside VS Code and backed by the urdf-robo-dresser REST server.",
+  "displayName": "urdf-robo-dresser",
+  "description": "3D URDF dressing viewer for industrial robots, hosted inside VS Code and backed by the urdf-robo-dresser REST server.",
   "version": "0.1.0",
   "publisher": "robotic-cellsim-tools",
   "license": "MIT",
@@ -21,7 +21,6 @@
     "robotics",
     "urdf",
     "dressing",
-    "viewer",
     "simulation"
   ],
   "activationEvents": [],
@@ -30,7 +29,8 @@
     "commands": [
       {
         "command": "roboDresser.openViewer",
-        "title": "Robo Dresser: Open 3D Dressing Viewer"
+        "title": "Robo Dresser: Open 3D Dressing Viewer",
+        "icon": "$(layout)"
       },
       {
         "command": "roboDresser.startServer",
@@ -77,8 +77,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "./build-vsix.sh",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:property": "vitest run test/property",
+    "test:example": "vitest run test/example",
+    "test:integration": "vitest run test/integration"
   },
   "devDependencies": {
     "@types/node": "^18.19.0",

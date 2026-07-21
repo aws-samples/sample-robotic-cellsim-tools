@@ -2,5 +2,5 @@ node_modules/
 out/
 *.vsix
 .vscode-test/
-# Native binary bundled into the .vsix by build-vsix.sh (build artifact).
+# Native binary bundled into the .vsix by the packaging script (build artifact).
 bin/

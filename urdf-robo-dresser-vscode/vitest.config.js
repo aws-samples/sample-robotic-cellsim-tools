@@ -1,11 +1,11 @@
 import { defineConfig } from "vitest/config";
 
-// Vitest config for the extension host's unit/property/integration tests.
-// These plain CommonJS/ESM modules run in a Node environment; the VS Code
-// globals they touch are mocked per-test.
+// Vitest config for urdf-robo-dresser-vscode. Property, example, and
+// integration tests live under test/, split by kind (mirroring the
+// unified-kiro-extension test layout), separate from the source in src/.
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    include: ["test/**/*.test.ts", "src/**/*.test.ts"],
     environment: "node",
   },
 });
